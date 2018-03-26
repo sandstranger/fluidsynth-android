@@ -19,10 +19,9 @@
 
 # CMake based build system. Pedro Lopez-Cabanillas <plcl@users.sf.net>
 
-cmake_minimum_required ( VERSION 3.0.2 )
+cmake_minimum_required ( VERSION 3.1.0 ) # because of CMAKE_C_STANDARD
 project ( FluidSynth C )
 set ( CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake_admin )
-set ( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 
 # FluidSynth package name
 set ( PACKAGE "fluidsynth" )
@@ -50,26 +49,27 @@ set ( LIB_VERSION_INFO
       "${LIB_VERSION_CURRENT}.${LIB_VERSION_AGE}.${LIB_VERSION_REVISION}" )
 
 # Options disabled by default
-option ( enable-floats "enable type float instead of double for DSP samples" off )
-option ( enable-profiling "profile the dsp code" off )
-option ( enable-portaudio "compile PortAudio support" off )
-option ( enable-trap-on-fpe "enable SIGFPE trap on Floating Point Exceptions" off )
-option ( enable-fpe-check "enable Floating Point Exception checks and debug messages" off )
 option ( enable-debug "enable debugging (default=no)" off )
+option ( enable-floats "enable type float instead of double for DSP samples" off )
+option ( enable-fpe-check "enable Floating Point Exception checks and debug messages" off )
+option ( enable-portaudio "compile PortAudio support" off )
+option ( enable-profiling "profile the dsp code" off )
+option ( enable-trap-on-fpe "enable SIGFPE trap on Floating Point Exceptions" off )
 
 # Options enabled by default
-option ( enable-pkgconfig "use pkg-config to locate fluidsynth's (mostly optional) dependencies" on )
-option ( enable-libsndfile "compile libsndfile support (if it is available)" on )
 option ( enable-aufile "compile support for sound file output" on )
-option ( enable-pulseaudio "compile PulseAudio support (if it is available)" on )
-option ( enable-jack "compile JACK support (if it is available)" on )
-option ( enable-midishare "compile MidiShare support (if it is available)" on )
-option ( enable-readline "compile readline lib line editing (if it is available)" on )
-option ( enable-dbus "compile DBUS support (if it is available)" on )
 option ( BUILD_SHARED_LIBS "Build a shared object or DLL" on )
+option ( enable-dbus "compile DBUS support (if it is available)" on )
+option ( enable-ipv6  "enable ipv6 support" on )
+option ( enable-jack "compile JACK support (if it is available)" on )
 option ( enable-ladspa "enable LADSPA effect units" on )
-option ( enable-ipv6  "enable ipv6 support " on )
-option ( enable-network "enable network support (requires BSD sockets) " on )
+option ( enable-libsndfile "compile libsndfile support (if it is available)" on )
+option ( enable-midishare "compile MidiShare support (if it is available)" on )
+option ( enable-network "enable network support (requires BSD sockets)" on )
+option ( enable-oss "compile OSS support (if it is available)" on )
+option ( enable-pkgconfig "use pkg-config to locate fluidsynth's (mostly optional) dependencies" on )
+option ( enable-pulseaudio "compile PulseAudio support (if it is available)" on )
+option ( enable-readline "compile readline lib line editing (if it is available)" on )
 
 # Platform specific options
 if ( CMAKE_SYSTEM MATCHES "Linux" )
@@ -102,6 +102,9 @@ endif()
 set ( LIB_SUFFIX ${_init_lib_suffix} CACHE STRING
       "library directory name suffix (32/64/nothing)" )
 mark_as_advanced ( LIB_SUFFIX )
+
+# the default C standard to use for all targets
+set(CMAKE_C_STANDARD 90)
 
 # Default install directory names
 include ( DefaultDirs )
@@ -159,9 +162,9 @@ if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_
   endif ( OS2 )
 
   set ( GNUCC_WARNING_FLAGS "-Wall -W -Wpointer-arith -Wbad-function-cast -Wno-cast-qual -Wcast-align -Wstrict-prototypes -Wno-unused-parameter -Wdeclaration-after-statement" )
-  set ( CMAKE_C_FLAGS_DEBUG "-std=gnu89 -g ${GNUCC_VISIBILITY_FLAG} -DDEBUG ${GNUCC_WARNING_FLAGS} -fsanitize=undefined ${CMAKE_C_FLAGS_DEBUG}" )
-  set ( CMAKE_C_FLAGS_RELEASE "-std=gnu89 -O2 -fomit-frame-pointer -finline-functions ${GNUCC_VISIBILITY_FLAG} -DNDEBUG ${GNUCC_WARNING_FLAGS} ${CMAKE_C_FLAGS_RELEASE}" )
-  set ( CMAKE_C_FLAGS_RELWITHDEBINFO "-std=gnu89 -O2 -g -fomit-frame-pointer -finline-functions ${GNUCC_VISIBILITY_FLAG} -DNDEBUG ${GNUCC_WARNING_FLAGS} ${CMAKE_C_FLAGS_RELWITHDEBINFO}" )
+  set ( CMAKE_C_FLAGS_DEBUG "-g ${GNUCC_VISIBILITY_FLAG} -DDEBUG ${GNUCC_WARNING_FLAGS} -fsanitize=undefined ${CMAKE_C_FLAGS_DEBUG}" )
+  set ( CMAKE_C_FLAGS_RELEASE "-O2 -fomit-frame-pointer -finline-functions ${GNUCC_VISIBILITY_FLAG} -DNDEBUG ${GNUCC_WARNING_FLAGS} ${CMAKE_C_FLAGS_RELEASE}" )
+  set ( CMAKE_C_FLAGS_RELWITHDEBINFO "-O2 -g -fomit-frame-pointer -finline-functions ${GNUCC_VISIBILITY_FLAG} -DNDEBUG ${GNUCC_WARNING_FLAGS} ${CMAKE_C_FLAGS_RELWITHDEBINFO}" )
 endif ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Intel" )
 
 # Windows
@@ -310,6 +313,48 @@ if ( CMAKE_BUILD_TYPE MATCHES "Debug" )
     set ( DEBUG 1 )
 endif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
 
+if ( CMAKE_VERSION VERSION_GREATER "3.6.0" )
+find_program( CLANG_TIDY
+            NAMES "clang-tidy"
+            DOC "Path to clang-tidy executable" )
+
+    if ( CLANG_TIDY )
+    message ( STATUS "Found clang-tidy" )
+        # whenever clang-tidy is available, use it to automatically add braces after ever "make"
+        if ( WITH_PROFILING )
+            set ( CMAKE_C_CLANG_TIDY "clang-tidy" )
+        else ( WITH_PROFILING )
+            set ( CMAKE_C_CLANG_TIDY "clang-tidy;-checks=-*,readability-braces-around-statements;-format-style=file" )
+        endif ( WITH_PROFILING )
+    endif ( CLANG_TIDY )
+endif ( CMAKE_VERSION VERSION_GREATER "3.6.0" )
+
+# Additional targets to perform clang-format/clang-tidy
+# Get all project files
+file(GLOB_RECURSE
+     ALL_SOURCE_FILES
+     LIST_DIRECTORIES false
+     ${CMAKE_SOURCE_DIR}/*.[chi]
+     ${CMAKE_SOURCE_DIR}/*.[chi]pp
+     ${CMAKE_SOURCE_DIR}/*.[chi]xx
+     ${CMAKE_SOURCE_DIR}/*.cc
+     ${CMAKE_SOURCE_DIR}/*.hh
+     ${CMAKE_SOURCE_DIR}/*.ii
+     ${CMAKE_SOURCE_DIR}/*.[CHI]
+     )
+
+# Adding clang-format target if executable is found
+find_program ( CLANG_FORMAT "clang-format" )
+if ( CLANG_FORMAT )
+  add_custom_target(
+    format
+    COMMAND ${CLANG_FORMAT}
+    -i
+    -style=file
+    ${ALL_SOURCE_FILES}
+    )
+endif(CLANG_FORMAT)
+
 
 if(NOT enable-pkgconfig)
 
@@ -423,16 +468,24 @@ if ( enable-aufile )
   set ( AUFILE_SUPPORT 1 )
 endif ( enable-aufile )
 
-find_package ( OSS QUIET )
-set ( OSS_SUPPORT ${OSS_FOUND} )
+unset ( OSS_SUPPORT CACHE )
+if ( enable-oss )
+  find_package ( OSS QUIET )
+  set ( OSS_SUPPORT ${OSS_FOUND} )
+endif ( enable-oss )
 
 unset ( MIDISHARE_SUPPORT CACHE )
-if ( enable_midishare )
-  find_package ( MidiShare )
+if ( enable-midishare )
+  find_package ( MidiShare QUIET )
   set ( MIDISHARE_SUPPORT ${MidiShare_FOUND} )
-else ( enable_midishare )
+  if ( MidiShare_FOUND )
+    set ( MidiShare_LIBS ${MidiShare_LIBRARIES} )
+  else ( MidiShare_FOUND )
+    unset ( MidiShare_LIBS CACHE )
+  endif ( MidiShare_FOUND )
+else ( enable-midishare )
   unset ( MidiShare_LIBS CACHE )
-endif ( enable_midishare )
+endif ( enable-midishare )
 
 unset ( WITH_READLINE CACHE )
 if ( enable-readline )
