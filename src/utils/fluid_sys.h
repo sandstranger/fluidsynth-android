@@ -39,17 +39,6 @@
 #include "fluidsynth_priv.h"
 
 
-#include <glib/gstdio.h>
-
-/**
- * Macro used for safely accessing a message from a GError and using a default
- * message if it is NULL.
- * @param err Pointer to a GError to access the message field of.
- * @return Message string
- */
-#define fluid_gerror_message(err)  ((err) ? err->message : "No error details")
-
-
 void fluid_sys_config(void);
 void fluid_log_config(void);
 void fluid_time_config(void);
@@ -235,8 +224,8 @@ fluid_istream_t fluid_socket_get_istream(fluid_socket_t sock);
 fluid_ostream_t fluid_socket_get_ostream(fluid_socket_t sock);
 
 /* File access */
-typedef GStatBuf fluid_stat_buf_t;
-#define fluid_stat(_filename, _statbuf)   g_stat((_filename), (_statbuf))
+typedef struct stat fluid_stat_buf_t;
+#define fluid_stat(_filename, _statbuf)   stat((_filename), (_statbuf))
 
 
 /* Profiling */
