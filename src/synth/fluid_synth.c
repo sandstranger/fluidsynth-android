@@ -24,7 +24,6 @@
 #include "fluid_tuning.h"
 #include "fluid_settings.h"
 #include "fluid_sfont.h"
-#include "fluid_hash.h"
 #include "fluid_defsfont.h"
 
 #ifdef TRAP_ON_FPE
@@ -95,8 +94,6 @@ static int fluid_synth_render_blocks(fluid_synth_t* synth, int blockcount);
 static fluid_voice_t* fluid_synth_free_voice_by_kill_LOCAL(fluid_synth_t* synth);
 static void fluid_synth_kill_by_exclusive_class_LOCAL(fluid_synth_t* synth,
                                                       fluid_voice_t* new_voice);
-static fluid_sfont_info_t *new_fluid_sfont_info (fluid_synth_t *synth,
-                                                 fluid_sfont_t *sfont);
 static int fluid_synth_sfunload_callback(void* data, unsigned int msec);
 void fluid_synth_release_voice_on_same_note_LOCAL(fluid_synth_t* synth,
                                                             int chan, int key);
@@ -214,7 +211,6 @@ void fluid_synth_settings(fluid_settings_t* settings)
   fluid_settings_register_int(settings, "synth.min-note-length", 10, 0, 65535, 0);
   
   fluid_settings_register_int(settings, "synth.threadsafe-api", 1, 0, 1, FLUID_HINT_TOGGLED);
-  fluid_settings_register_int(settings, "synth.parallel-render", 1, 0, 1, FLUID_HINT_TOGGLED);
 
   fluid_settings_register_num(settings, "synth.overflow.percussion", 4000, -10000, 10000, 0);
   fluid_settings_register_num(settings, "synth.overflow.sustained", -1000, -10000, 10000, 0);
@@ -688,9 +684,6 @@ new_fluid_synth(fluid_settings_t *settings)
 
   /* as soon as the synth is created it starts playing. */
   synth->state = FLUID_SYNTH_PLAYING;
-  synth->sfont_info = NULL;
-  synth->sfont_hash = new_fluid_hashtable (NULL, NULL);
-  synth->noteid = 0;
   
   synth->fromkey_portamento = INVALID_NOTE;		/* disable portamento */
 
@@ -699,9 +692,8 @@ new_fluid_synth(fluid_settings_t *settings)
   fluid_private_init(synth->tuning_iter);
 
   /* Allocate event queue for rvoice mixer */
-  fluid_settings_getint(settings, "synth.parallel-render", &i);
   /* In an overflow situation, a new voice takes about 50 spaces in the queue! */
-  synth->eventhandler = new_fluid_rvoice_eventhandler(i, synth->polyphony*64,
+  synth->eventhandler = new_fluid_rvoice_eventhandler(synth->polyphony*64,
 	synth->polyphony, nbuf, synth->effects_channels, synth->sample_rate);
 
   if (synth->eventhandler == NULL)
@@ -847,7 +839,7 @@ delete_fluid_synth(fluid_synth_t* synth)
 {
   int i, k;
   fluid_list_t *list;
-  fluid_sfont_info_t* sfont_info;
+  fluid_sfont_t* sfont;
   fluid_sfloader_t* loader;
   fluid_mod_t* default_mod;
   fluid_mod_t* mod;
@@ -887,18 +879,11 @@ delete_fluid_synth(fluid_synth_t* synth)
   delete_fluid_rvoice_eventhandler(synth->eventhandler);
 
   /* delete all the SoundFonts */
-  for (list = synth->sfont_info; list; list = fluid_list_next (list)) {
-    sfont_info = (fluid_sfont_info_t *)fluid_list_get (list);
-    fluid_sfont_delete_internal (sfont_info->sfont);
-    FLUID_FREE (sfont_info);
+  for (list = synth->sfont; list; list = fluid_list_next (list)) {
+    sfont = fluid_list_get (list);
+    fluid_sfont_delete_internal (sfont);
   }
-
-  delete_fluid_list(synth->sfont_info);
-
-
-  /* Delete the SoundFont info hash */
-  delete_fluid_hashtable (synth->sfont_hash);
-
+  delete_fluid_list(synth->sfont);
 
   /* delete all the SoundFont loaders */
 
@@ -2233,20 +2218,20 @@ fluid_synth_get_preset(fluid_synth_t* synth, unsigned int sfontnum,
                        unsigned int banknum, unsigned int prognum)
 {
   fluid_preset_t *preset = NULL;
-  fluid_sfont_info_t *sfont_info;
+  fluid_sfont_t *sfont;
   fluid_list_t *list;
 
   /* 128 indicates an "unset" operation" */
   if (prognum == FLUID_UNSET_PROGRAM) return NULL;
 
-  for (list = synth->sfont_info; list; list = fluid_list_next (list)) {
-    sfont_info = (fluid_sfont_info_t *)fluid_list_get (list);
+  for (list = synth->sfont; list; list = fluid_list_next (list)) {
+    sfont = fluid_list_get (list);
 
-    if (fluid_sfont_get_id (sfont_info->sfont) == sfontnum)
+    if (fluid_sfont_get_id (sfont) == sfontnum)
     {
-      preset = fluid_sfont_get_preset (sfont_info->sfont,
-                                       banknum - sfont_info->bankofs, prognum);
-      if (preset) sfont_info->refcount++;       /* Add reference to SoundFont */
+      preset = fluid_sfont_get_preset (sfont,
+                                       banknum - sfont->bankofs, prognum);
+      if (preset) sfont->refcount++;       /* Add reference to SoundFont */
       break;
     }
   }
@@ -2265,17 +2250,17 @@ fluid_synth_get_preset_by_sfont_name(fluid_synth_t* synth, const char *sfontname
                                      unsigned int banknum, unsigned int prognum)
 {
   fluid_preset_t *preset = NULL;
-  fluid_sfont_info_t *sfont_info;
+  fluid_sfont_t *sfont;
   fluid_list_t *list;
 
-  for (list = synth->sfont_info; list; list = fluid_list_next (list)) {
-    sfont_info = (fluid_sfont_info_t *)fluid_list_get (list);
+  for (list = synth->sfont; list; list = fluid_list_next (list)) {
+    sfont = fluid_list_get (list);
 
-    if (FLUID_STRCMP (fluid_sfont_get_name (sfont_info->sfont), sfontname) == 0)
+    if (FLUID_STRCMP (fluid_sfont_get_name (sfont), sfontname) == 0)
     {
-      preset = fluid_sfont_get_preset (sfont_info->sfont,
-                                       banknum - sfont_info->bankofs, prognum);
-      if (preset) sfont_info->refcount++;       /* Add reference to SoundFont */
+      preset = fluid_sfont_get_preset (sfont,
+                                       banknum - sfont->bankofs, prognum);
+      if (preset) sfont->refcount++;       /* Add reference to SoundFont */
       break;
     }
   }
@@ -2293,17 +2278,17 @@ fluid_synth_find_preset(fluid_synth_t* synth, unsigned int banknum,
                         unsigned int prognum)
 {
   fluid_preset_t *preset = NULL;
-  fluid_sfont_info_t *sfont_info;
+  fluid_sfont_t *sfont;
   fluid_list_t *list;
 
-  for (list = synth->sfont_info; list; list = fluid_list_next (list)) {
-    sfont_info = (fluid_sfont_info_t *)fluid_list_get (list);
+  for (list = synth->sfont; list; list = fluid_list_next (list)) {
+    sfont = fluid_list_get (list);
 
-    preset = fluid_sfont_get_preset (sfont_info->sfont,
-                                     banknum - sfont_info->bankofs, prognum);
+    preset = fluid_sfont_get_preset (sfont,
+                                     banknum - sfont->bankofs, prognum);
     if (preset)
     {
-      sfont_info->refcount++;       /* Add reference to SoundFont */
+      sfont->refcount++;       /* Add reference to SoundFont */
       break;
     }
   }
@@ -2913,9 +2898,6 @@ fluid_synth_nwrite_float(fluid_synth_t* synth, int len,
   int bytes;
 #endif
   float cpu_load;
-
-  if (!synth->eventhandler->is_threadsafe)
-    fluid_synth_api_enter(synth);
   
   /* First, take what's still available in the buffer */
   count = 0;
@@ -3024,9 +3006,6 @@ fluid_synth_nwrite_float(fluid_synth_t* synth, int len,
   time = fluid_utime() - time;
   cpu_load = 0.5 * (fluid_atomic_float_get(&synth->cpu_load) + time * synth->sample_rate / len / 10000.0);
   fluid_atomic_float_set (&synth->cpu_load, cpu_load);
-
-  if (!synth->eventhandler->is_threadsafe)
-    fluid_synth_api_exit(synth);
   
   return FLUID_OK;
 }
@@ -3109,10 +3088,7 @@ fluid_synth_write_float(fluid_synth_t* synth, int len,
   float cpu_load;
 
   fluid_profile_ref_var (prof_ref);
-  
-  if (!synth->eventhandler->is_threadsafe)
-    fluid_synth_api_enter(synth);
-  
+    
   fluid_rvoice_mixer_set_mix_fx(synth->eventhandler->mixer, 1);
   l = synth->cur;
   fluid_rvoice_mixer_get_bufs(synth->eventhandler->mixer, &left_in, &right_in);
@@ -3136,9 +3112,6 @@ fluid_synth_write_float(fluid_synth_t* synth, int len,
   time = fluid_utime() - time;
   cpu_load = 0.5 * (fluid_atomic_float_get(&synth->cpu_load) + time * synth->sample_rate / len / 10000.0);
   fluid_atomic_float_set (&synth->cpu_load, cpu_load);
-
-  if (!synth->eventhandler->is_threadsafe)
-    fluid_synth_api_exit(synth);
  
   fluid_profile_write(FLUID_PROF_WRITE, prof_ref,
                       fluid_rvoice_mixer_get_active_voices(synth->eventhandler->mixer),
@@ -3216,10 +3189,7 @@ fluid_synth_write_s16(fluid_synth_t* synth, int len,
   float cpu_load;
 
   fluid_profile_ref_var (prof_ref);
-  
-  if (!synth->eventhandler->is_threadsafe)
-    fluid_synth_api_enter(synth);
-  
+    
   fluid_rvoice_mixer_set_mix_fx(synth->eventhandler->mixer, 1);
   fluid_rvoice_mixer_get_bufs(synth->eventhandler->mixer, &left_in, &right_in);
 
@@ -3259,9 +3229,6 @@ fluid_synth_write_s16(fluid_synth_t* synth, int len,
   cpu_load = 0.5 * (fluid_atomic_float_get(&synth->cpu_load) + time * synth->sample_rate / len / 10000.0);
   fluid_atomic_float_set (&synth->cpu_load, cpu_load);
 
-  if (!synth->eventhandler->is_threadsafe)
-    fluid_synth_api_exit(synth);
-  
   fluid_profile_write(FLUID_PROF_WRITE, prof_ref,
                       fluid_rvoice_mixer_get_active_voices(synth->eventhandler->mixer),
                       len);
@@ -3647,8 +3614,7 @@ fluid_synth_start_voice(fluid_synth_t* synth, fluid_voice_t* voice)
   fluid_synth_kill_by_exclusive_class_LOCAL(synth, voice);
 
   fluid_voice_start(voice);     /* Start the new voice */
-  if (synth->eventhandler->is_threadsafe)
-    fluid_voice_lock_rvoice(voice);
+  fluid_voice_lock_rvoice(voice);
   fluid_rvoice_eventhandler_add_rvoice(synth->eventhandler, voice->rvoice);
   fluid_synth_api_exit(synth);
 }
@@ -3675,7 +3641,7 @@ fluid_synth_add_sfloader(fluid_synth_t* synth, fluid_sfloader_t* loader)
   fluid_synth_api_enter(synth);
 
   /* Test if sfont is already loaded */
-  if (synth->sfont_info == NULL) 
+  if (synth->sfont == NULL) 
     synth->loaders = fluid_list_prepend(synth->loaders, loader);
   fluid_synth_api_exit(synth);
 }
@@ -3689,12 +3655,11 @@ fluid_synth_add_sfloader(fluid_synth_t* synth, fluid_sfloader_t* loader)
  * @param synth FluidSynth instance
  * @param filename File to load
  * @param reset_presets TRUE to re-assign presets for all MIDI channels (equivalent to calling fluid_synth_program_reset())
- * @return SoundFont ID on success, FLUID_FAILED on error
+ * @return SoundFont ID on success, #FLUID_FAILED on error
  */
 int
 fluid_synth_sfload(fluid_synth_t* synth, const char* filename, int reset_presets)
 {
-  fluid_sfont_info_t *sfont_info;
   fluid_sfont_t *sfont;
   fluid_list_t *list;
   fluid_sfloader_t *loader;
@@ -3712,17 +3677,10 @@ fluid_synth_sfload(fluid_synth_t* synth, const char* filename, int reset_presets
     sfont = fluid_sfloader_load(loader, filename);
 
     if (sfont != NULL) {
-      sfont_info = new_fluid_sfont_info (synth, sfont);
-
-      if (!sfont_info)
-      {
-        fluid_sfont_delete_internal (sfont);
-        FLUID_API_RETURN(FLUID_FAILED);
-      }
-
+      sfont->refcount++;
       sfont->id = sfont_id = ++synth->sfont_id;
-      synth->sfont_info = fluid_list_prepend(synth->sfont_info, sfont_info);   /* prepend to list */
-      fluid_hashtable_insert (synth->sfont_hash, sfont, sfont_info);       /* Hash sfont->sfont_info */
+      
+      synth->sfont = fluid_list_prepend(synth->sfont, sfont);   /* prepend to list */
 
       /* reset the presets for all channels if requested */
       if (reset_presets) fluid_synth_program_reset(synth);
@@ -3735,51 +3693,29 @@ fluid_synth_sfload(fluid_synth_t* synth, const char* filename, int reset_presets
   FLUID_API_RETURN(FLUID_FAILED);
 }
 
-/* Create a new SoundFont info structure, free with FLUID_FREE */
-static fluid_sfont_info_t *
-new_fluid_sfont_info (fluid_synth_t *synth, fluid_sfont_t *sfont)
-{
-  fluid_sfont_info_t *sfont_info;
-
-  sfont_info = FLUID_NEW (fluid_sfont_info_t);
-
-  if (!sfont_info)
-  {
-    FLUID_LOG(FLUID_ERR, "Out of memory");
-    return NULL;
-  }
-
-  sfont_info->sfont = sfont;
-  sfont_info->synth = synth;
-  sfont_info->refcount = 1;     /* Start with refcount of 1 for owning synth */
-  sfont_info->bankofs = 0;
-
-  return (sfont_info);
-}
-
 /**
  * Unload a SoundFont.
  * @param synth FluidSynth instance
  * @param id ID of SoundFont to unload
  * @param reset_presets TRUE to re-assign presets for all MIDI channels
- * @return #FLUID_OK on success, FLUID_FAILED on error
+ * @return #FLUID_OK on success, #FLUID_FAILED on error
  */
 int
 fluid_synth_sfunload(fluid_synth_t* synth, unsigned int id, int reset_presets)
 {
-  fluid_sfont_info_t *sfont_info = NULL;
+  fluid_sfont_t *sfont = NULL;
   fluid_list_t *list;
 
   fluid_return_val_if_fail (synth != NULL, FLUID_FAILED);
   fluid_synth_api_enter(synth);
   
   /* remove the SoundFont from the list */
-  for (list = synth->sfont_info; list; list = fluid_list_next(list)) {
-    sfont_info = (fluid_sfont_info_t*) fluid_list_get(list);
+  for (list = synth->sfont; list; list = fluid_list_next(list)) {
+    sfont = fluid_list_get(list);
 
-    if (fluid_sfont_get_id (sfont_info->sfont) == id)
+    if (fluid_sfont_get_id (sfont) == id)
     {
-      synth->sfont_info = fluid_list_remove (synth->sfont_info, sfont_info);
+      synth->sfont = fluid_list_remove (synth->sfont, sfont);
       break;
     }
   }
@@ -3793,8 +3729,8 @@ fluid_synth_sfunload(fluid_synth_t* synth, unsigned int id, int reset_presets)
   if (reset_presets) fluid_synth_program_reset (synth);
   else fluid_synth_update_presets (synth);
 
-  /* -- Remove synth->sfont_info list's reference to SoundFont */
-  fluid_synth_sfont_unref (synth, sfont_info->sfont);
+  /* -- Remove synth->sfont list's reference to SoundFont */
+  fluid_synth_sfont_unref (synth, sfont);
 
   FLUID_API_RETURN(FLUID_OK);
 }
@@ -3802,31 +3738,18 @@ fluid_synth_sfunload(fluid_synth_t* synth, unsigned int id, int reset_presets)
 /* Unref a SoundFont and destroy if no more references */
 void
 fluid_synth_sfont_unref (fluid_synth_t *synth, fluid_sfont_t *sfont)
-{
-  fluid_sfont_info_t *sfont_info;
-  int refcount = 0;
+{  
+  fluid_return_if_fail (sfont != NULL);    /* Shouldn't happen, programming error if so */
+
+  sfont->refcount--;             /* -- Remove the sfont list's reference */
   
-  sfont_info = fluid_hashtable_lookup (synth->sfont_hash, sfont);
-
-  if (sfont_info)
+  if (sfont->refcount == 0) /* No more references? - Attempt delete */
   {
-    sfont_info->refcount--;             /* -- Remove the sfont_info list's reference */
-    refcount = sfont_info->refcount;
-
-    if (refcount == 0)    /* Remove SoundFont from hash if no more references */
-      fluid_hashtable_remove (synth->sfont_hash, sfont_info->sfont);
-  }
-
-  fluid_return_if_fail (sfont_info != NULL);    /* Shouldn't happen, programming error if so */
-
-  if (refcount == 0)                    /* No more references? - Attempt delete */
-  {
-    if (fluid_sfont_delete_internal (sfont_info->sfont) == 0)    /* SoundFont loader can block SoundFont unload */
+    if (fluid_sfont_delete_internal (sfont) == 0)    /* SoundFont loader can block SoundFont unload */
     {
-      FLUID_FREE (sfont_info);
       FLUID_LOG (FLUID_DBG, "Unloaded SoundFont");
     } /* spin off a timer thread to unload the sfont later (SoundFont loader blocked unload) */
-    else new_fluid_timer (100, fluid_synth_sfunload_callback, sfont_info, TRUE, TRUE, FALSE);    
+    else new_fluid_timer (100, fluid_synth_sfunload_callback, sfont, TRUE, TRUE, FALSE);    
   }
 }
 
@@ -3835,11 +3758,10 @@ fluid_synth_sfont_unref (fluid_synth_t *synth, fluid_sfont_t *sfont)
 static int
 fluid_synth_sfunload_callback(void* data, unsigned int msec)
 {
-  fluid_sfont_info_t *sfont_info = (fluid_sfont_info_t *)data;
+  fluid_sfont_t *sfont = data;
 
-  if (fluid_sfont_delete_internal (sfont_info->sfont) == 0)
+  if (fluid_sfont_delete_internal (sfont) == 0)
   {
-    FLUID_FREE (sfont_info);
     FLUID_LOG (FLUID_DBG, "Unloaded SoundFont");
     return FALSE;
   }
@@ -3850,37 +3772,36 @@ fluid_synth_sfunload_callback(void* data, unsigned int msec)
  * Reload a SoundFont.  The SoundFont retains its ID and index on the SoundFont stack.
  * @param synth FluidSynth instance
  * @param id ID of SoundFont to reload
- * @return SoundFont ID on success, FLUID_FAILED on error
+ * @return SoundFont ID on success, #FLUID_FAILED on error
  */
 int
 fluid_synth_sfreload(fluid_synth_t* synth, unsigned int id)
 {
-  char filename[1024];
-  fluid_sfont_info_t *sfont_info, *old_sfont_info;
-  fluid_sfont_t* sfont;
+  char *filename = NULL;
+  fluid_sfont_t *sfont;
   fluid_sfloader_t* loader;
   fluid_list_t *list;
-  int index;
+  int index, ret = FLUID_FAILED;
 
   fluid_return_val_if_fail (synth != NULL, FLUID_FAILED);
   fluid_synth_api_enter(synth);
 
   /* Search for SoundFont and get its index */
-  for (list = synth->sfont_info, index = 0; list; list = fluid_list_next (list), index++) {
-    old_sfont_info = (fluid_sfont_info_t *)fluid_list_get (list);
-    if (fluid_sfont_get_id (old_sfont_info->sfont) == id) break;
+  for (list = synth->sfont, index = 0; list; list = fluid_list_next (list), index++) {
+    sfont = fluid_list_get (list);
+    if (fluid_sfont_get_id (sfont) == id) break;
   }
 
   if (!list) {
     FLUID_LOG(FLUID_ERR, "No SoundFont with id = %d", id);
-    FLUID_API_RETURN(FLUID_FAILED);
+    goto exit;
   }
 
   /* keep a copy of the SoundFont's filename */
-  FLUID_STRCPY (filename, fluid_sfont_get_name (old_sfont_info->sfont));
+  filename = FLUID_STRDUP(fluid_sfont_get_name (sfont));
 
-  if (fluid_synth_sfunload (synth, id, FALSE) != FLUID_OK)
-    FLUID_API_RETURN(FLUID_FAILED);
+  if (filename == NULL || fluid_synth_sfunload (synth, id, FALSE) != FLUID_OK)
+      goto exit;
 
   /* MT Note: SoundFont loader list will not change */
 
@@ -3891,51 +3812,42 @@ fluid_synth_sfreload(fluid_synth_t* synth, unsigned int id)
 
     if (sfont != NULL) {
       sfont->id = id;
+      sfont->refcount++;
 
-      sfont_info = new_fluid_sfont_info (synth, sfont);
-
-      if (!sfont_info)
-      {
-        fluid_sfont_delete_internal (sfont);
-        FLUID_API_RETURN(FLUID_FAILED);
-      }
-
-      synth->sfont_info = fluid_list_insert_at(synth->sfont_info, index, sfont_info);  /* insert the sfont at the same index */
-      fluid_hashtable_insert (synth->sfont_hash, sfont, sfont_info);       /* Hash sfont->sfont_info */
+      synth->sfont = fluid_list_insert_at(synth->sfont, index, sfont);  /* insert the sfont at the same index */
 
       /* reset the presets for all channels */
       fluid_synth_update_presets(synth);
-      FLUID_API_RETURN(sfont->id);
+      ret = id;
+      goto exit;
     }
   }
 
   FLUID_LOG(FLUID_ERR, "Failed to load SoundFont \"%s\"", filename);
-  FLUID_API_RETURN(FLUID_FAILED);  
+  
+exit:
+  FLUID_FREE(filename);
+  FLUID_API_RETURN(ret);  
 }
 
 /**
  * Add a SoundFont.  The SoundFont will be added to the top of the SoundFont stack.
  * @param synth FluidSynth instance
  * @param sfont SoundFont to add
- * @return New assigned SoundFont ID or FLUID_FAILED on error
+ * @return New assigned SoundFont ID or #FLUID_FAILED on error
  */
 int
 fluid_synth_add_sfont(fluid_synth_t* synth, fluid_sfont_t* sfont)
 {
-  fluid_sfont_info_t *sfont_info;
   unsigned int sfont_id;
 
   fluid_return_val_if_fail (synth != NULL, FLUID_FAILED);
   fluid_return_val_if_fail (sfont != NULL, FLUID_FAILED);
   fluid_synth_api_enter(synth);
   
-  sfont_info = new_fluid_sfont_info (synth, sfont);
-  if (!sfont_info) 
-      FLUID_API_RETURN(FLUID_FAILED);
 
   sfont->id = sfont_id = ++synth->sfont_id;
-  synth->sfont_info = fluid_list_prepend (synth->sfont_info, sfont_info);       /* prepend to list */
-  fluid_hashtable_insert (synth->sfont_hash, sfont, sfont_info);   /* Hash sfont->sfont_info */
+  synth->sfont = fluid_list_prepend (synth->sfont, sfont);       /* prepend to list */
 
   /* reset the presets for all channels */
   fluid_synth_program_reset (synth);
@@ -3947,6 +3859,7 @@ fluid_synth_add_sfont(fluid_synth_t* synth, fluid_sfont_t* sfont)
  * Remove a SoundFont from the SoundFont stack without deleting it.
  * @param synth FluidSynth instance
  * @param sfont SoundFont to remove
+ * @return #FLUID_OK if \c sfont successfully removed, #FLUID_FAILED otherwise
  *
  * SoundFont is not freed and is left as the responsibility of the caller.
  *
@@ -3954,33 +3867,33 @@ fluid_synth_add_sfont(fluid_synth_t* synth, fluid_sfont_t* sfont)
  *   referencing it.  This can only be ensured by the SoundFont loader and
  *   therefore this function should not normally be used.
  */
-void
+int
 fluid_synth_remove_sfont(fluid_synth_t* synth, fluid_sfont_t* sfont)
 {
-  fluid_sfont_info_t *sfont_info;
+  fluid_sfont_t *sfont_tmp;
   fluid_list_t *list;
+  int ret = FLUID_FAILED;
 
-  fluid_return_if_fail (synth != NULL);
-  fluid_return_if_fail (sfont != NULL);
+  fluid_return_val_if_fail (synth != NULL, FLUID_FAILED);
+  fluid_return_val_if_fail (sfont != NULL, FLUID_FAILED);
   fluid_synth_api_enter(synth);
   
   /* remove the SoundFont from the list */
-  for (list = synth->sfont_info; list; list = fluid_list_next(list)) {
-    sfont_info = (fluid_sfont_info_t*) fluid_list_get(list);
+  for (list = synth->sfont; list; list = fluid_list_next(list)) {
+    sfont_tmp = fluid_list_get(list);
 
-    if (sfont_info->sfont == sfont)
+    if (sfont_tmp == sfont)
     {
-      synth->sfont_info = fluid_list_remove (synth->sfont_info, sfont_info);
-
-      /* Remove from SoundFont hash regardless of refcount (SoundFont delete is up to caller) */
-      fluid_hashtable_remove (synth->sfont_hash, sfont_info->sfont);
+      synth->sfont = fluid_list_remove (synth->sfont, sfont_tmp);
+      ret = FLUID_OK;
       break;
     }
   }
 
   /* reset the presets for all channels */
   fluid_synth_program_reset (synth);
-  fluid_synth_api_exit(synth);
+  
+  FLUID_API_RETURN(ret);
 }
 
 /**
@@ -3995,7 +3908,7 @@ fluid_synth_sfcount(fluid_synth_t* synth)
   
   fluid_return_val_if_fail (synth != NULL, 0);
   fluid_synth_api_enter(synth);
-  count = fluid_list_size (synth->sfont_info);
+  count = fluid_list_size (synth->sfont);
   FLUID_API_RETURN(count);
 }
 
@@ -4016,8 +3929,8 @@ fluid_synth_get_sfont(fluid_synth_t* synth, unsigned int num)
 
   fluid_return_val_if_fail (synth != NULL, NULL);
   fluid_synth_api_enter(synth);
-  list = fluid_list_nth (synth->sfont_info, num);
-  if (list) sfont = ((fluid_sfont_info_t *)fluid_list_get (list))->sfont;
+  list = fluid_list_nth (synth->sfont, num);
+  if (list) sfont = fluid_list_get (list);
   FLUID_API_RETURN(sfont);
 }
 
@@ -4039,8 +3952,8 @@ fluid_synth_get_sfont_by_id(fluid_synth_t* synth, unsigned int id)
   fluid_return_val_if_fail (synth != NULL, NULL);
   fluid_synth_api_enter(synth);
 
-  for (list = synth->sfont_info; list; list = fluid_list_next(list)) {
-    sfont = ((fluid_sfont_info_t *)fluid_list_get (list))->sfont;
+  for (list = synth->sfont; list; list = fluid_list_next(list)) {
+    sfont = fluid_list_get (list);
     if (fluid_sfont_get_id (sfont) == id)
       break;
   }
@@ -4068,8 +3981,8 @@ fluid_synth_get_sfont_by_name(fluid_synth_t* synth, const char *name)
   fluid_return_val_if_fail (name != NULL, NULL);
   fluid_synth_api_enter(synth);
 
-  for (list = synth->sfont_info; list; list = fluid_list_next(list)) {
-    sfont = ((fluid_sfont_info_t *)fluid_list_get (list))->sfont;
+  for (list = synth->sfont; list; list = fluid_list_next(list)) {
+    sfont = fluid_list_get (list);
     if (FLUID_STRCMP(fluid_sfont_get_name(sfont), name) == 0)
       break;
   }
@@ -5141,8 +5054,18 @@ fluid_synth_get_settings(fluid_synth_t* synth)
 }
 
 /**
- * Same as calling \c fluid_synth_set_gen2(synth, chan, param, value, FALSE, FALSE)
+ * Set a SoundFont generator (effect) value on a MIDI channel in real-time.
+ * @param synth FluidSynth instance
+ * @param chan MIDI channel number (0 to MIDI channel count - 1)
+ * @param param SoundFont generator ID (#fluid_gen_type)
+ * @param value Offset or absolute generator value to assign to the MIDI channel
  * @return #FLUID_OK on success, #FLUID_FAILED otherwise
+ *
+ * This function allows for setting all effect parameters in real time on a
+ * MIDI channel. Setting absolute to non-zero will cause the value to override
+ * any generator values set in the instruments played on the MIDI channel.
+ * See SoundFont 2.01 spec, paragraph 8.1.3, page 48 for details on SoundFont
+ * generator parameters and valid ranges.
  */
 int fluid_synth_set_gen(fluid_synth_t* synth, int chan, int param, float value)
 {
@@ -5343,22 +5266,23 @@ fluid_synth_stop_LOCAL (fluid_synth_t *synth, unsigned int id)
  * @param synth FluidSynth instance
  * @param sfont_id ID of a loaded SoundFont
  * @param offset Bank offset value to apply to all instruments
+ * @return #FLUID_OK if the offset was set successfully, #FLUID_FAILED otherwise
  */
 int
 fluid_synth_set_bank_offset(fluid_synth_t* synth, int sfont_id, int offset)
 {
-  fluid_sfont_info_t *sfont_info;
+  fluid_sfont_t *sfont;
   fluid_list_t *list;
 
   fluid_return_val_if_fail (synth != NULL, FLUID_FAILED);
   fluid_synth_api_enter(synth);
   
-  for (list = synth->sfont_info; list; list = fluid_list_next(list)) {
-    sfont_info = (fluid_sfont_info_t *)fluid_list_get (list);
+  for (list = synth->sfont; list; list = fluid_list_next(list)) {
+    sfont = fluid_list_get (list);
 
-    if (fluid_sfont_get_id (sfont_info->sfont) == (unsigned int)sfont_id)
+    if (fluid_sfont_get_id (sfont) == (unsigned int)sfont_id)
     {
-      sfont_info->bankofs = offset;
+      sfont->bankofs = offset;
       break;
     }
   }
@@ -5381,19 +5305,19 @@ fluid_synth_set_bank_offset(fluid_synth_t* synth, int sfont_id, int offset)
 int
 fluid_synth_get_bank_offset(fluid_synth_t* synth, int sfont_id)
 {
-  fluid_sfont_info_t *sfont_info;
+  fluid_sfont_t *sfont;
   fluid_list_t *list;
   int offset = 0;
 
   fluid_return_val_if_fail (synth != NULL, 0);
   fluid_synth_api_enter(synth);
 
-  for (list = synth->sfont_info; list; list = fluid_list_next(list)) {
-    sfont_info = (fluid_sfont_info_t *)fluid_list_get (list);
+  for (list = synth->sfont; list; list = fluid_list_next(list)) {
+    sfont = fluid_list_get (list);
 
-    if (fluid_sfont_get_id (sfont_info->sfont) == (unsigned int)sfont_id)
+    if (fluid_sfont_get_id (sfont) == (unsigned int)sfont_id)
     {
-      offset = sfont_info->bankofs;
+      offset = sfont->bankofs;
       break;
     }
   }

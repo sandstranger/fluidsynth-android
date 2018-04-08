@@ -656,7 +656,7 @@ void fluid_rvoice_mixer_set_ladspa(fluid_rvoice_mixer_t* mixer,
             &mixer->buffers.fx_left_buf[SYNTH_REVERB_CHANNEL]);
 
     fluid_ladspa_add_host_ports(ladspa_fx, "Chorus:Send", 1,
-            &mixer->buffers.fx_left_buf[SYNTH_REVERB_CHANNEL]);
+            &mixer->buffers.fx_left_buf[SYNTH_CHORUS_CHANNEL]);
 }
 #endif
 
@@ -676,14 +676,14 @@ void fluid_rvoice_mixer_set_mix_fx(fluid_rvoice_mixer_t* mixer, int on)
 }
 
 void fluid_rvoice_mixer_set_chorus_params(fluid_rvoice_mixer_t* mixer, int set, 
-				         int nr, double level, double speed, 
-				         double depth_ms, int type)
+				         int nr, fluid_real_t level, fluid_real_t speed, 
+				         fluid_real_t depth_ms, int type)
 {
   fluid_chorus_set(mixer->fx.chorus, set, nr, level, speed, depth_ms, type);
 }
 void fluid_rvoice_mixer_set_reverb_params(fluid_rvoice_mixer_t* mixer, int set, 
-					 double roomsize, double damping, 
-					 double width, double level)
+					 fluid_real_t roomsize, fluid_real_t damping, 
+					 fluid_real_t width, fluid_real_t level)
 {
   fluid_revmodel_set(mixer->fx.reverb, set, roomsize, damping, width, level); 
 }
