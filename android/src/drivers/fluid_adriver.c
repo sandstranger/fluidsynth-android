@@ -23,5 +23,16 @@
 
 void fluid_audio_driver_settings(fluid_settings_t* settings)
 {
-    // NOOP
+  /* Register audio settings */
+  fluid_settings_register_str(settings, "audio.sample-format", "16bits", 0);
+  fluid_settings_add_option(settings, "audio.sample-format", "16bits");
+  fluid_settings_add_option(settings, "audio.sample-format", "float");
+
+  fluid_settings_register_int(settings, "audio.period-size", 64, 64, 8192, 0);
+  fluid_settings_register_int(settings, "audio.periods", 16, 2, 64, 0);
+
+  fluid_settings_register_int (settings, "audio.realtime-prio",
+                               FLUID_DEFAULT_AUDIO_RT_PRIO, 0, 99, 0);
+
+  fluid_settings_register_str(settings, "audio.driver", "", 0);  
 }
