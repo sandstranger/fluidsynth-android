@@ -129,7 +129,7 @@ const char* fluid_defsfont_sfont_get_name(fluid_sfont_t* sfont)
 }
 
 fluid_preset_t*
-fluid_defsfont_sfont_get_preset(fluid_sfont_t* sfont, unsigned int bank, unsigned int prenum)
+fluid_defsfont_sfont_get_preset(fluid_sfont_t* sfont, int bank, int prenum)
 {
   return fluid_defsfont_get_preset(fluid_sfont_get_data(sfont), bank, prenum);
 }
@@ -273,7 +273,7 @@ const char* fluid_defsfont_get_name(fluid_defsfont_t* defsfont)
 int fluid_defsfont_load_sampledata(fluid_defsfont_t *defsfont, SFData *sfdata, fluid_sample_t *sample)
 {
     int num_samples;
-    int source_end = sample->source_end;
+    unsigned int source_end = sample->source_end;
 
     /* For uncompressed samples we want to include the 46 zero sample word area following each sample
      * in the Soundfont. Otherwise samples with loopend > end, which we have decided not to correct, would
@@ -520,7 +520,7 @@ int fluid_defsfont_add_preset(fluid_defsfont_t* defsfont, fluid_defpreset_t* def
 /*
  * fluid_defsfont_get_preset
  */
-fluid_preset_t* fluid_defsfont_get_preset(fluid_defsfont_t* defsfont, unsigned int bank, unsigned int num)
+fluid_preset_t* fluid_defsfont_get_preset(fluid_defsfont_t* defsfont, int bank, int num)
 {
     fluid_preset_t *preset;
     fluid_list_t *list;
