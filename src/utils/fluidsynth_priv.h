@@ -299,7 +299,8 @@ do { strncpy(_dst,_src,_n); \
 #ifdef NDEBUG
 #define FLUID_ASSERT(a) 
 #else
-#define FLUID_ASSERT(a) g_assert(a)
+#include <assert.h>
+#define FLUID_ASSERT(a) assert(a)
 #endif
 
 #define FLUID_LIKELY(x)      __builtin_expect(!!(x), 1)
