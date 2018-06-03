@@ -296,11 +296,11 @@ do { strncpy(_dst,_src,_n); \
 #define M_LN10 2.3025850929940456840179914546844
 #endif
 
-#ifdef NDEBUG
-#define FLUID_ASSERT(a) 
-#else
+#ifdef DEBUG
 #include <assert.h>
 #define FLUID_ASSERT(a) assert(a)
+#else
+#define FLUID_ASSERT(a)
 #endif
 
 #define FLUID_LIKELY(x)      __builtin_expect(!!(x), 1)
