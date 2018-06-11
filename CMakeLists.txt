@@ -19,6 +19,93 @@
 
 # CMake based build system. Pedro Lopez-Cabanillas <plcl@users.sf.net>
 
+if ( ANDROID )
+
+cmake_minimum_required(VERSION 3.4.1)
+
+set(fluidsynth_sources
+        src/midi/fluid_midi.c
+        src/midi/fluid_midi_router.c
+        src/midi/fluid_seq.c
+        src/midi/fluid_seqbind.c
+        src/rvoice/fluid_adsr_env.c
+        src/rvoice/fluid_chorus.c
+        src/rvoice/fluid_iir_filter.c
+        src/rvoice/fluid_lfo.c
+        src/rvoice/fluid_rev.c
+        src/rvoice/fluid_rvoice.c
+        src/rvoice/fluid_rvoice_dsp.c
+        src/rvoice/fluid_rvoice_event.c
+        src/rvoice/fluid_rvoice_mixer.c
+        src/sfloader/fluid_defsfont.c
+        src/sfloader/fluid_ramsfont.c
+        src/sfloader/fluid_sfont.c
+        src/sfloader/fluid_sffile.c
+        src/sfloader/fluid_samplecache.c
+        src/synth/fluid_chan.c
+        src/synth/fluid_event.c
+        src/synth/fluid_gen.c
+        src/synth/fluid_mod.c
+        src/synth/fluid_synth.c
+        src/synth/fluid_tuning.c
+        src/synth/fluid_voice.c
+        src/synth/fluid_synth_monopoly.c
+        src/utils/fluid_conv.c
+        src/utils/fluid_hash.c
+        src/utils/fluid_list.c
+        src/utils/fluid_ringbuffer.c
+        src/utils/fluid_settings.c
+        src/bindings/fluid_filerenderer.c
+        src/utils/fluid_sys.c
+        android/src/bindings/fluid_cmd.c
+        android/src/drivers/fluid_adriver.c
+        android/src/drivers/fluid_mdriver.c
+)
+
+set ( public_main_HEADER
+    ${CMAKE_BINARY_DIR}/include/fluidsynth.h
+)
+
+configure_file ( include/fluidsynth.cmake
+                 ${public_main_HEADER} )
+
+add_library(fluidsynth SHARED ${fluidsynth_sources})
+
+if(ANDROID_ABI STREQUAL "armeabi-v7a")
+        target_compile_options(fluidsynth PRIVATE -DWITH_FLOAT)
+endif()
+if(ANDROID_ABI STREQUAL "x86")
+        target_compile_options(fluidsynth PRIVATE -DWITH_FLOAT)
+endif()
+
+# Specify directories which the compiler should look for headers
+target_include_directories(fluidsynth PRIVATE
+                            android android/include
+                            include
+                            src/synth
+                            src/midi
+                            src/rvoice
+                            src/sfloader
+                            src/utils
+                            src/bindings
+                            src/drivers
+                            ${CMAKE_BINARY_DIR}/include
+                            )
+
+target_include_directories(fluidsynth INTERFACE
+                            android android/include
+                            include
+                            ${CMAKE_BINARY_DIR}/include
+                            )
+
+target_compile_options(fluidsynth PRIVATE -std=gnu11
+                            PRIVATE -Wall
+                            PRIVATE -DHAVE_CONFIG_H
+                            PRIVATE -Wno-unused-variable
+                            PRIVATE "$<$<CONFIG:DEBUG>:-Werror>") # Only include -Werror when building debug config
+
+else ( ANDROID )
+
 cmake_minimum_required ( VERSION 3.1.0 ) # because of CMAKE_C_STANDARD
 project ( FluidSynth C )
 set ( CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake_admin )
@@ -635,3 +722,5 @@ set ( CPACK_PACKAGE_NAME ${PACKAGE} )
 set ( CPACK_STRIP_FILES ON )
 
 include ( CPack )
+
+endif ( ANDROID )
