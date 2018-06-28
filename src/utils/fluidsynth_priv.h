@@ -175,12 +175,12 @@ typedef struct _fluid_rvoice_eventhandler_t fluid_rvoice_eventhandler_t;
  * in fluid_lfo.c and fluid_adsr.c as well */
 typedef union _fluid_rvoice_param_t
 {
-    void* ptr;
+    void *ptr;
     int i;
     fluid_real_t real;
 } fluid_rvoice_param_t;
 enum { MAX_EVENT_PARAMS = 6 }; /**< Maximum number of #fluid_rvoice_param_t to be passed to an #fluid_rvoice_function_t */
-typedef void (*fluid_rvoice_function_t)(void* obj, const fluid_rvoice_param_t param[MAX_EVENT_PARAMS]);
+typedef void (*fluid_rvoice_function_t)(void *obj, const fluid_rvoice_param_t param[MAX_EVENT_PARAMS]);
 
 /* Macro for declaring an rvoice event function (#fluid_rvoice_function_t). The functions may only access
  * those params that were previously set in fluid_voice.c
@@ -194,6 +194,7 @@ typedef void (*fluid_rvoice_function_t)(void* obj, const fluid_rvoice_param_t pa
  */
 
 #define FLUID_BUFSIZE                64         /**< FluidSynth internal buffer size (in samples) */
+#define FLUID_MIXER_MAX_BUFFERS_DEFAULT (8192/FLUID_BUFSIZE) /**< Number of buffers that can be processed in one rendering run */
 #define FLUID_MAX_EVENTS_PER_BUFSIZE 1024       /**< Maximum queued MIDI events per #FLUID_BUFSIZE */
 #define FLUID_MAX_RETURN_EVENTS      1024       /**< Maximum queued synthesis thread return events */
 #define FLUID_MAX_EVENT_QUEUES       16         /**< Maximum number of unique threads queuing events */
@@ -205,7 +206,7 @@ typedef void (*fluid_rvoice_function_t)(void* obj, const fluid_rvoice_param_t pa
  *
  *                      SYSTEM INTERFACE
  */
-typedef FILE*  fluid_file;
+typedef FILE  *fluid_file;
 
 #define FLUID_MALLOC(_n)             malloc(_n)
 #define FLUID_REALLOC(_p,_n)         realloc(_p,_n)
@@ -234,40 +235,40 @@ do { strncpy(_dst,_src,_n); \
 #define FLUID_STRRCHR(_s,_c)         strrchr(_s,_c)
 
 #ifdef strdup
-    #define FLUID_STRDUP(s)          strdup(s)
+#define FLUID_STRDUP(s)          strdup(s)
 #else
-    #define FLUID_STRDUP(s)          FLUID_STRCPY(FLUID_MALLOC(FLUID_STRLEN(s) + 1), s)
+#define FLUID_STRDUP(s)          FLUID_STRCPY(FLUID_MALLOC(FLUID_STRLEN(s) + 1), s)
 #endif
 
 #define FLUID_SPRINTF                sprintf
 #define FLUID_FPRINTF                fprintf
 
 #if (defined(WIN32) && _MSC_VER < 1900) || defined(MINGW32)
-    /* need to make sure we use a C99 compliant implementation of (v)snprintf(),
-     * i.e. not microsofts non compliant extension _snprintf() as it doesnt
-     * reliably null-terminates the buffer
-     */
-    #define FLUID_SNPRINTF           g_snprintf
+/* need to make sure we use a C99 compliant implementation of (v)snprintf(),
+ * i.e. not microsofts non compliant extension _snprintf() as it doesnt
+ * reliably null-terminates the buffer
+ */
+#define FLUID_SNPRINTF           g_snprintf
 #else
-    #define FLUID_SNPRINTF           snprintf
+#define FLUID_SNPRINTF           snprintf
 #endif
 
 #if (defined(WIN32) && _MSC_VER < 1500) || defined(MINGW32)
-    #define FLUID_VSNPRINTF          g_vsnprintf
+#define FLUID_VSNPRINTF          g_vsnprintf
 #else
-    #define FLUID_VSNPRINTF          vsnprintf
+#define FLUID_VSNPRINTF          vsnprintf
 #endif
 
 #if defined(WIN32) && !defined(MINGW32)
-    #define FLUID_STRCASECMP         _stricmp
+#define FLUID_STRCASECMP         _stricmp
 #else
-    #define FLUID_STRCASECMP         strcasecmp
+#define FLUID_STRCASECMP         strcasecmp
 #endif
 
 #if defined(WIN32) && !defined(MINGW32)
-    #define FLUID_STRNCASECMP         _strnicmp
+#define FLUID_STRNCASECMP         _strnicmp
 #else
-    #define FLUID_STRNCASECMP         strncasecmp
+#define FLUID_STRNCASECMP         strncasecmp
 #endif
 
 
@@ -306,6 +307,6 @@ do { strncpy(_dst,_src,_n); \
 #define FLUID_LIKELY(x)      __builtin_expect(!!(x), 1)
 #define FLUID_UNLIKELY(x)    __builtin_expect(!!(x), 0)
 
-char* fluid_error(void);
+char *fluid_error(void);
 
 #endif /* _FLUIDSYNTH_PRIV_H */
