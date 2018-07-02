@@ -38,7 +38,6 @@ set(fluidsynth_sources
         src/rvoice/fluid_rvoice_event.c
         src/rvoice/fluid_rvoice_mixer.c
         src/sfloader/fluid_defsfont.c
-        src/sfloader/fluid_ramsfont.c
         src/sfloader/fluid_sfont.c
         src/sfloader/fluid_sffile.c
         src/sfloader/fluid_samplecache.c
