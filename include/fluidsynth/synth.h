@@ -171,6 +171,7 @@ FLUIDSYNTH_API int fluid_synth_count_midi_channels(fluid_synth_t *synth);
 FLUIDSYNTH_API int fluid_synth_count_audio_channels(fluid_synth_t *synth);
 FLUIDSYNTH_API int fluid_synth_count_audio_groups(fluid_synth_t *synth);
 FLUIDSYNTH_API int fluid_synth_count_effects_channels(fluid_synth_t *synth);
+FLUIDSYNTH_API int fluid_synth_count_effects_groups(fluid_synth_t *synth);
 
 
 /* Synthesis parameters */
@@ -246,7 +247,7 @@ enum fluid_synth_add_mod
     FLUID_SYNTH_ADD,              /**< Add (sum) modulator amounts */
 };
 
-FLUIDSYNTH_API int fluid_synth_add_default_mod(fluid_synth_t *synth, fluid_mod_t *mod, int mode);
+FLUIDSYNTH_API int fluid_synth_add_default_mod(fluid_synth_t *synth, const fluid_mod_t *mod, int mode);
 FLUIDSYNTH_API int fluid_synth_remove_default_mod(fluid_synth_t *synth, const fluid_mod_t *mod);
 
 
@@ -264,7 +265,7 @@ FLUIDSYNTH_API int fluid_synth_write_s16(fluid_synth_t *synth, int len,
 FLUIDSYNTH_API int fluid_synth_write_float(fluid_synth_t *synth, int len,
         void *lout, int loff, int lincr,
         void *rout, int roff, int rincr);
-FLUIDSYNTH_API int fluid_synth_nwrite_float(fluid_synth_t *synth, int len,
+FLUID_DEPRECATED FLUIDSYNTH_API int fluid_synth_nwrite_float(fluid_synth_t *synth, int len,
         float **left, float **right,
         float **fx_left, float **fx_right);
 FLUIDSYNTH_API int fluid_synth_process(fluid_synth_t *synth, int len,

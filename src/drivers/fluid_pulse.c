@@ -54,12 +54,6 @@ typedef struct
 } fluid_pulse_audio_driver_t;
 
 
-fluid_audio_driver_t *new_fluid_pulse_audio_driver(fluid_settings_t *settings,
-        fluid_synth_t *synth);
-fluid_audio_driver_t *new_fluid_pulse_audio_driver2(fluid_settings_t *settings,
-        fluid_audio_func_t func, void *data);
-void delete_fluid_pulse_audio_driver(fluid_audio_driver_t *p);
-void fluid_pulse_audio_driver_settings(fluid_settings_t *settings);
 static fluid_thread_return_t fluid_pulse_audio_run(void *d);
 static fluid_thread_return_t fluid_pulse_audio_run2(void *d);
 
@@ -300,6 +294,9 @@ fluid_pulse_audio_run2(void *d)
 
     while(dev->cont)
     {
+        FLUID_MEMSET(left, 0, buffer_size * sizeof(float));
+        FLUID_MEMSET(right, 0, buffer_size * sizeof(float));
+
         (*dev->callback)(synth, buffer_size, 0, NULL, 2, handle);
 
         /* Interleave the floating point data */
