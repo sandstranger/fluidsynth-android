@@ -148,7 +148,6 @@ static int fluid_synth_set_chorus_full_LOCAL(fluid_synth_t *synth, int set, int 
 /* fluid_atomic_int_t may be anything, so init with {0} to catch most cases */
 static fluid_atomic_int_t fluid_synth_initialized = {0};
 static void fluid_synth_init(void);
-static void init_dither(void);
 
 /* default modulators
  * SF2.01 page 52 ff:
@@ -207,7 +206,7 @@ void fluid_synth_settings(fluid_settings_t *settings)
     fluid_settings_register_int(settings, "synth.chorus.nr", FLUID_CHORUS_DEFAULT_N, 0, 99, 0);
     fluid_settings_register_num(settings, "synth.chorus.level", FLUID_CHORUS_DEFAULT_LEVEL, 0.0f, 10.0f, 0);
     fluid_settings_register_num(settings, "synth.chorus.speed", FLUID_CHORUS_DEFAULT_SPEED, 0.29f, 5.0f, 0);
-    fluid_settings_register_num(settings, "synth.chorus.depth", FLUID_CHORUS_DEFAULT_DEPTH, 0.0f, 21.0f, 0);
+    fluid_settings_register_num(settings, "synth.chorus.depth", FLUID_CHORUS_DEFAULT_DEPTH, 0.0f, 256.0f, 0);
 
     fluid_settings_register_int(settings, "synth.ladspa.active", 0, 0, 1, FLUID_HINT_TOGGLED);
     fluid_settings_register_int(settings, "synth.lock-memory", 1, 0, 1, FLUID_HINT_TOGGLED);
@@ -289,8 +288,6 @@ fluid_synth_init(void)
     fluid_conversion_config();
 
     fluid_rvoice_dsp_config();
-
-    fluid_sys_config();
 
     init_dither();
 
@@ -3004,8 +3001,7 @@ fluid_synth_handle_sample_rate(void *data, const char *name, double value)
 
 /**
  * Set sample rate of the synth.
- * @note This function is currently experimental and should only be
- * used when no voices or notes are active, and before any rendering calls.
+ * @note This function should only be used when no voices or notes are active.
  * @param synth FluidSynth instance
  * @param sample_rate New sample rate (Hz)
  * @since 1.1.2

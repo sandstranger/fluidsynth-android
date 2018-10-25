@@ -38,12 +38,6 @@
 
 #include "fluidsynth_priv.h"
 
-
-void fluid_sys_config(void);
-void fluid_log_config(void);
-void fluid_time_config(void);
-
-
 /* Misc */
 #if defined(__INTEL_COMPILER)
 #define FLUID_RESTRICT restrict
