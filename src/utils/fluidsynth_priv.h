@@ -115,6 +115,34 @@
 #include <stdint.h>
 #endif
 
+<<<<<<< HEAD
+=======
+#if defined(WIN32) &&  HAVE_WINDOWS_H
+#include <winsock2.h>
+#include <ws2tcpip.h>	/* Provides also socklen_t */
+
+/* WIN32 special defines */
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+
+#ifdef _MSC_VER
+#pragma warning(disable : 4244)
+#pragma warning(disable : 4101)
+#pragma warning(disable : 4305)
+#pragma warning(disable : 4996)
+#endif
+
+#endif
+
+/* Darwin special defines (taken from config_macosx.h) */
+#ifdef DARWIN
+# define MACINTOSH
+# define __Types__
+#endif
+
+
+>>>>>>> 417dc59ffd45b31d57ca3cd376b1148b4c9c09d3
 #include "fluidsynth.h"
 
 
