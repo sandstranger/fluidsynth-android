@@ -115,8 +115,6 @@
 #include <stdint.h>
 #endif
 
-<<<<<<< HEAD
-=======
 #if defined(WIN32) &&  HAVE_WINDOWS_H
 #include <winsock2.h>
 #include <ws2tcpip.h>	/* Provides also socklen_t */
@@ -142,7 +140,6 @@
 #endif
 
 
->>>>>>> 417dc59ffd45b31d57ca3cd376b1148b4c9c09d3
 #include "fluidsynth.h"
 
 
