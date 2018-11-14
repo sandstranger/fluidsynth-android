@@ -81,6 +81,7 @@ endif()
 target_include_directories(fluidsynth PRIVATE
                             android android/include
                             include
+			    src
                             src/synth
                             src/midi
                             src/rvoice
