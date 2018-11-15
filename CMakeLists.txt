@@ -81,7 +81,7 @@ endif()
 target_include_directories(fluidsynth PRIVATE
                             android android/include
                             include
-			    src
+                            src
                             src/synth
                             src/midi
                             src/rvoice
@@ -90,6 +90,7 @@ target_include_directories(fluidsynth PRIVATE
                             src/bindings
                             src/drivers
                             ${CMAKE_BINARY_DIR}/include
+                            ${CMAKE_BINARY_DIR}
                             )
 
 target_include_directories(fluidsynth INTERFACE
@@ -103,6 +104,18 @@ target_compile_options(fluidsynth PRIVATE -std=gnu11
                             PRIVATE -DHAVE_CONFIG_H
                             PRIVATE -Wno-unused-variable
                             PRIVATE "$<$<CONFIG:DEBUG>:-Werror>") # Only include -Werror when building debug config
+
+# ******* Auto Generated Lookup Tables ******
+
+include(ExternalProject)
+ExternalProject_Add(gentables
+        DOWNLOAD_COMMAND ""
+        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/gentables
+        BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/gentables
+        INSTALL_COMMAND ${CMAKE_CURRENT_BINARY_DIR}/src/gentables/make_tables${CMAKE_EXECUTABLE_SUFFIX} "${CMAKE_BINARY_DIR}/"
+        CMAKE_GENERATOR "Unix Makefiles"
+        )
+add_dependencies(fluidsynth gentables)
 
 else ( ANDROID )
 
