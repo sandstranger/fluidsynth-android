@@ -57,8 +57,8 @@ set(fluidsynth_sources
         src/bindings/fluid_filerenderer.c
         src/utils/fluid_sys.c
         android/src/bindings/fluid_cmd.c
-        android/src/drivers/fluid_adriver.c
-        android/src/drivers/fluid_mdriver.c
+        src/drivers/fluid_adriver.c
+        src/drivers/fluid_mdriver.c
 )
 
 set ( public_main_HEADER
