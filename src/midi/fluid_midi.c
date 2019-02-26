@@ -99,10 +99,12 @@ int fluid_is_midifile(const char *filename)
 
     do
     {
+    #ifndef ANDROID
         if(!fluid_file_test(filename, G_FILE_TEST_IS_REGULAR))
         {
             return retcode;
         }
+    #endif
         
         // file seems to exist and is a regular file or a symlink to such
         if((fp = FLUID_FOPEN(filename, "rb")) == NULL)
