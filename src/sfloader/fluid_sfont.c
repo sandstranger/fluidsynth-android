@@ -25,7 +25,8 @@
 void *default_fopen(const char *path)
 {
     FILE* handle;
-    
+
+ #ifndef ANDROID   
     if(!fluid_file_test(path, G_FILE_TEST_EXISTS))
     {
         FLUID_LOG(FLUID_ERR, "fluid_sfloader_load(): Unable to load non-existent file. ('%s')", path);
@@ -37,6 +38,7 @@ void *default_fopen(const char *path)
         FLUID_LOG(FLUID_ERR, "fluid_sfloader_load(): Refusing to load non-regular file! ('%s')", path);
         return NULL;
     }
+#endif
     
     if((handle = FLUID_FOPEN(path, "rb")) == NULL)
     {
