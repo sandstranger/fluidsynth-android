@@ -113,6 +113,10 @@
 #if HAVE_STDINT_H
 #include <stdint.h>
 
+#if HAVE_PTHREAD_H
+#include <pthread.h>
+#endif
+
 #else
 
 /* Assume GLIB types */
