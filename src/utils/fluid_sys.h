@@ -161,7 +161,7 @@ typedef guint64  uint64_t;
 
 
 #define FLUID_INLINE              inline
-#define FLUID_POINTER_TO_UINT(x)  ((uint) (unsigned long) (p))
+#define FLUID_POINTER_TO_UINT(p)  ((uint) (unsigned long) (p))
 #define FLUID_UINT_TO_POINTER(u)  ((void*) (unsigned long) (u))
 #define FLUID_POINTER_TO_INT(p)   ((int)  (long) (p))
 #define FLUID_INT_TO_POINTER(i)   ((void*) (long) (i))
