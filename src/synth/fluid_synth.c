@@ -494,16 +494,13 @@ struct _fluid_sample_timer_t
  */
 static void fluid_sample_timer_process(fluid_synth_t *synth)
 {
-    fluid_sample_timer_t *st, *stnext;
+    fluid_sample_timer_t *st;
     long msec;
     int cont;
     unsigned int ticks = fluid_synth_get_ticks(synth);
 
-    for(st = synth->sample_timers; st; st = stnext)
+    for(st = synth->sample_timers; st; st = st->next)
     {
-        /* st may be freed in the callback below. cache it's successor now to avoid use after free */
-        stnext = st->next;
-
         if(st->isfinished)
         {
             continue;
@@ -529,7 +526,7 @@ fluid_sample_timer_t *new_fluid_sample_timer(fluid_synth_t *synth, fluid_timer_c
         return NULL;
     }
 
-    result->starttick = fluid_synth_get_ticks(synth);
+    fluid_sample_timer_reset(synth, result);
     result->isfinished = 0;
     result->data = data;
     result->callback = callback;
@@ -559,6 +556,10 @@ void delete_fluid_sample_timer(fluid_synth_t *synth, fluid_sample_timer_t *timer
     }
 }
 
+void fluid_sample_timer_reset(fluid_synth_t *synth, fluid_sample_timer_t *timer)
+{
+    timer->starttick = fluid_synth_get_ticks(synth);
+}
 
 /***************************************************************
  *
@@ -837,6 +838,7 @@ new_fluid_synth(fluid_settings_t *settings)
         goto error_recovery;
     }
 
+    FLUID_MEMSET(synth->channel, 0, synth->midi_channels * sizeof(*synth->channel));
     for(i = 0; i < synth->midi_channels; i++)
     {
         synth->channel[i] = new_fluid_channel(synth, i);
@@ -856,6 +858,7 @@ new_fluid_synth(fluid_settings_t *settings)
         goto error_recovery;
     }
 
+    FLUID_MEMSET(synth->voice, 0, synth->nvoice * sizeof(*synth->voice));
     for(i = 0; i < synth->nvoice; i++)
     {
         synth->voice[i] = new_fluid_voice(synth->eventhandler, synth->sample_rate);
@@ -1008,7 +1011,10 @@ delete_fluid_synth(fluid_synth_t *synth)
     {
         for(i = 0; i < synth->midi_channels; i++)
         {
-            fluid_channel_set_preset(synth->channel[i], NULL);
+            if(synth->channel[i] != NULL)
+            {
+                fluid_channel_set_preset(synth->channel[i], NULL);
+            }
         }
     }
 
@@ -1235,7 +1241,7 @@ fluid_synth_noteoff_LOCAL(fluid_synth_t *synth, int chan, int key)
     {
         /* channel is poly and legato CC is Off) */
         /* removes the note from the monophonic list */
-        if(key == fluid_channel_last_note(channel))
+        if(channel->n_notes && key == fluid_channel_last_note(channel))
         {
             fluid_channel_clear_monolist(channel);
         }
@@ -3639,12 +3645,19 @@ int
 fluid_synth_process(fluid_synth_t *synth, int len, int nfx, float *fx[],
                     int nout, float *out[])
 {
+    return fluid_synth_process_LOCAL(synth, len, nfx, fx, nout, out, fluid_synth_render_blocks);
+}
+
+int
+fluid_synth_process_LOCAL(fluid_synth_t *synth, int len, int nfx, float *fx[],
+                    int nout, float *out[], int (*block_render_func)(fluid_synth_t *, int))
+{
     fluid_real_t *left_in, *fx_left_in;
     fluid_real_t *right_in, *fx_right_in;
     int nfxchan, nfxunits, naudchan;
 
     double time = fluid_utime();
-    int i, f, num, count;
+    int i, f, num, count, buffered_blocks;
 
     float cpu_load;
 
@@ -3668,9 +3681,10 @@ fluid_synth_process(fluid_synth_t *synth, int len, int nfx, float *fx[],
     count = 0;
     num = synth->cur;
 
-    if(synth->cur < FLUID_BUFSIZE)
+    buffered_blocks = (synth->cur + FLUID_BUFSIZE - 1) / FLUID_BUFSIZE;
+    if(synth->cur < buffered_blocks * FLUID_BUFSIZE)
     {
-        int available = FLUID_BUFSIZE - synth->cur;
+        int available = (buffered_blocks * FLUID_BUFSIZE) - synth->cur;
         num = (available > len) ? len : available;
 
         if(nout != 0)
@@ -3712,7 +3726,7 @@ fluid_synth_process(fluid_synth_t *synth, int len, int nfx, float *fx[],
     while(count < len)
     {
         int blocksleft = (len - count + FLUID_BUFSIZE - 1) / FLUID_BUFSIZE;
-        int blockcount = fluid_synth_render_blocks(synth, blocksleft);
+        int blockcount = block_render_func(synth, blocksleft);
 
         num = (blockcount * FLUID_BUFSIZE > len - count) ? len - count : blockcount * FLUID_BUFSIZE;
 

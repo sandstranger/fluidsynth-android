@@ -11,7 +11,7 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Library General Public License for more details.
- *  
+ *
  * You should have received a copy of the GNU Library General Public
  * License along with this library; if not, write to the Free
  * Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
@@ -31,10 +31,10 @@ extern "C" {
  * @brief Library version functions and defines
  */
 
-#define FLUIDSYNTH_VERSION       "2.0.4"           /**< String constant of libfluidsynth version. */
+#define FLUIDSYNTH_VERSION       "2.0.7"           /**< String constant of libfluidsynth version. */
 #define FLUIDSYNTH_VERSION_MAJOR 2     /**< libfluidsynth major version integer constant. */
 #define FLUIDSYNTH_VERSION_MINOR 0     /**< libfluidsynth minor version integer constant. */
-#define FLUIDSYNTH_VERSION_MICRO 4     /**< libfluidsynth micro version integer constant. */
+#define FLUIDSYNTH_VERSION_MICRO 7     /**< libfluidsynth micro version integer constant. */
 
 FLUIDSYNTH_API void fluid_version(int *major, int *minor, int *micro);
 FLUIDSYNTH_API char* fluid_version_str(void);

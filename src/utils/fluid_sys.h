@@ -19,7 +19,7 @@
  */
 
 
-/**
+/*
  * @file fluid_sys.h
  *
  * This header contains a bunch of (mostly) system and machine
@@ -162,7 +162,7 @@
     (uint32_t)(((uint32_t)(_a) << 24) | ((uint32_t)(_b) << 16) | ((uint32_t)(_c) << 8) | (uint32_t)(_d))
 #else
 #define FLUID_FOURCC(_a, _b, _c, _d) \
-    (uint32_t)(((uint32_t)(_d) << 24) | ((uint32_t)(_c) << 16) | ((uint32_t)(_b) << 8) | (uint32_t)(_a)) 
+    (uint32_t)(((uint32_t)(_d) << 24) | ((uint32_t)(_c) << 16) | ((uint32_t)(_b) << 8) | (uint32_t)(_a))
 #endif
 
 /*
@@ -335,6 +335,7 @@ fluid_ostream_t fluid_socket_get_ostream(fluid_socket_t sock);
 typedef struct stat fluid_stat_buf_t;
 #define fluid_stat(_filename, _statbuf)   stat((_filename), (_statbuf))
 
+FILE* fluid_file_open(const char* filename, const char** errMsg);
 
 /* Profiling */
 #if WITH_PROFILING
