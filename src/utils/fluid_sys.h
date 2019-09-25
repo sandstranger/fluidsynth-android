@@ -112,23 +112,10 @@
 /** Integer types  */
 #if HAVE_STDINT_H
 #include <stdint.h>
+#endif
 
 #if HAVE_PTHREAD_H
 #include <pthread.h>
-#endif
-
-#else
-
-/* Assume GLIB types */
-typedef gint8    int8_t;
-typedef guint8   uint8_t;
-typedef gint16   int16_t;
-typedef guint16  uint16_t;
-typedef gint32   int32_t;
-typedef guint32  uint32_t;
-typedef gint64   int64_t;
-typedef guint64  uint64_t;
-
 #endif
 
 #if defined(WIN32) &&  HAVE_WINDOWS_H

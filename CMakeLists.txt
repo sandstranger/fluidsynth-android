@@ -20,7 +20,7 @@
 # CMake based build system. Pedro Lopez-Cabanillas <plcl@users.sf.net>
 
 if ( ANDROID )
-
+enable_language(C)
 cmake_minimum_required(VERSION 3.4.1)
 
 set(fluidsynth_sources
