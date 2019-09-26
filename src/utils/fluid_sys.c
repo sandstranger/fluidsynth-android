@@ -179,17 +179,28 @@ fluid_log(int level, const char *fmt, ...)
         if(fun != NULL)
         {
             char errbuf[1024];
-            
+
             va_list args;
             va_start(args, fmt);
             FLUID_VSNPRINTF(errbuf, sizeof(errbuf), fmt, args);
             va_end(args);
-        
+
             (*fun)(level, errbuf, fluid_log_user_data[level]);
         }
     }
 
     return FLUID_FAILED;
+}
+
+/**
+ * Convenience wrapper for free() that satisfies at least C90 requirements.
+ * Especially useful when using fluidsynth with programming languages that do not provide malloc() and free().
+ * @note Only use this function when the API documentation explicitly says so. Otherwise use adequate \c delete_fluid_* functions.
+ * @since 2.0.7
+ */
+void fluid_free(void* ptr)
+{
+    free(ptr);
 }
 
 /**
@@ -309,9 +320,9 @@ double
 fluid_utime(void)
 {
     struct timespec timeval;
-    
+
     clock_gettime(CLOCK_REALTIME, &timeval);
-    
+
     return (timeval.tv_sec * 1000000.0 + timeval.tv_nsec / 1000.0);
 }
 
@@ -346,26 +357,26 @@ void
 fluid_thread_self_set_prio(int prio_level)
 {
     struct sched_param priority;
-    
+
     if(prio_level > 0)
     {
-        
+
         memset(&priority, 0, sizeof(priority));
         priority.sched_priority = prio_level;
-        
+
         if(pthread_setschedparam(pthread_self(), SCHED_FIFO, &priority) == 0)
         {
             return;
         }
-        
+
 #ifdef DBUS_SUPPORT
         /* Try to gain high priority via rtkit */
-        
+
         if(fluid_rtkit_make_realtime(0, prio_level) == 0)
         {
             return;
         }
-        
+
 #endif
         FLUID_LOG(FLUID_WARN, "Failed to set thread to high priority");
     }
@@ -882,12 +893,12 @@ static fluid_thread_return_t
 fluid_thread_high_prio (void *data)
 {
     fluid_thread_info_t *info = data;
-    
+
     fluid_thread_self_set_prio(info->prio_level);
-    
+
     info->func(info->data);
     FLUID_FREE(info);
-    
+
     return FLUID_THREAD_RETURN_VALUE;
 }
 /**
@@ -956,7 +967,7 @@ int
 fluid_thread_join(fluid_thread_t *thread)
 {
     pthread_join(*thread, NULL);
-    
+
     return FLUID_OK;
 }
 
@@ -1535,3 +1546,38 @@ void delete_fluid_server_socket(fluid_server_socket_t *server_socket)
 }
 
 #endif // NETWORK_SUPPORT
+
+FILE* fluid_file_open(const char* path, const char** errMsg)
+{
+    static const char ErrExist[] = "File does not exist.";
+    static const char ErrRegular[] = "File is not regular, refusing to open it.";
+    static const char ErrNull[] = "File does not exists or insufficient permissions to open it.";
+
+    FILE* handle = NULL;
+#ifndef ANDROID
+    if(!g_file_test(path, G_FILE_TEST_EXISTS))
+    {
+        if(errMsg != NULL)
+        {
+            *errMsg = ErrExist;
+        }
+    }
+    else if(!g_file_test(path, G_FILE_TEST_IS_REGULAR))
+    {
+        if(errMsg != NULL)
+        {
+            *errMsg = ErrRegular;
+        }
+    }
+    else
+#endif
+    if((handle = FLUID_FOPEN(path, "rb")) == NULL)
+    {
+        if(errMsg != NULL)
+        {
+            *errMsg = ErrNull;
+        }
+    }
+
+    return handle;
+}

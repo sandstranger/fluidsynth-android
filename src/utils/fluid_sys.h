@@ -19,7 +19,7 @@
  */
 
 
-/**
+/*
  * @file fluid_sys.h
  *
  * This header contains a bunch of (mostly) system and machine
@@ -112,23 +112,10 @@
 /** Integer types  */
 #if HAVE_STDINT_H
 #include <stdint.h>
+#endif
 
 #if HAVE_PTHREAD_H
 #include <pthread.h>
-#endif
-
-#else
-
-/* Assume GLIB types */
-typedef gint8    int8_t;
-typedef guint8   uint8_t;
-typedef gint16   int16_t;
-typedef guint16  uint16_t;
-typedef gint32   int32_t;
-typedef guint32  uint32_t;
-typedef gint64   int64_t;
-typedef guint64  uint64_t;
-
 #endif
 
 #if defined(WIN32) &&  HAVE_WINDOWS_H
@@ -175,7 +162,7 @@ typedef guint64  uint64_t;
     (uint32_t)(((uint32_t)(_a) << 24) | ((uint32_t)(_b) << 16) | ((uint32_t)(_c) << 8) | (uint32_t)(_d))
 #else
 #define FLUID_FOURCC(_a, _b, _c, _d) \
-    (uint32_t)(((uint32_t)(_d) << 24) | ((uint32_t)(_c) << 16) | ((uint32_t)(_b) << 8) | (uint32_t)(_a)) 
+    (uint32_t)(((uint32_t)(_d) << 24) | ((uint32_t)(_c) << 16) | ((uint32_t)(_b) << 8) | (uint32_t)(_a))
 #endif
 
 /*
@@ -251,7 +238,7 @@ static FLUID_INLINE fluid_cond_mutex_t *
 new_fluid_cond_mutex(void)
 {
     fluid_cond_mutex_t *mutex;
-    mutex = malloc(sizeof(fluid_cond_mutex_t));
+    mutex = (fluid_cond_mutex_t *)malloc(sizeof(fluid_cond_mutex_t));
     fluid_cond_mutex_init(mutex);
     return mutex;
 }
@@ -276,7 +263,7 @@ static FLUID_INLINE fluid_cond_t *
 new_fluid_cond(void)
 {
     fluid_cond_t *cond;
-    cond = malloc(sizeof(fluid_cond_t));
+    cond = (fluid_cond_t *)malloc(sizeof(fluid_cond_t));
     fluid_cond_init(cond);
     return cond;
 }
@@ -348,6 +335,7 @@ fluid_ostream_t fluid_socket_get_ostream(fluid_socket_t sock);
 typedef struct stat fluid_stat_buf_t;
 #define fluid_stat(_filename, _statbuf)   stat((_filename), (_statbuf))
 
+FILE* fluid_file_open(const char* filename, const char** errMsg);
 
 /* Profiling */
 #if WITH_PROFILING
