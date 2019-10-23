@@ -148,10 +148,13 @@
 
 
 #define FLUID_INLINE              inline
-#define FLUID_POINTER_TO_UINT(p)  ((uint) (unsigned long) (p))
-#define FLUID_UINT_TO_POINTER(u)  ((void*) (unsigned long) (u))
-#define FLUID_POINTER_TO_INT(p)   ((int)  (long) (p))
-#define FLUID_INT_TO_POINTER(i)   ((void*) (long) (i))
+
+/* Integer<->pointer conversion */
+#define FLUID_POINTER_TO_UINT(x)  ((unsigned int)(uintptr_t)(x))
+#define FLUID_UINT_TO_POINTER(x)  ((void *)(uintptr_t)(x))
+#define FLUID_POINTER_TO_INT(x)   ((signed int)(intptr_t)(x))
+#define FLUID_INT_TO_POINTER(x)   ((void *)(intptr_t)(x))
+
 #define FLUID_IS_BIG_ENDIAN       false
 
 #define FLUID_LE32TOH(x)          le32toh(x)
