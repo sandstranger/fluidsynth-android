@@ -156,7 +156,7 @@
 #define FLUID_INT_TO_POINTER(x)   ((void *)(intptr_t)(x))
 
 /* Endian detection */
-#define FLUID_IS_BIG_ENDIAN       (G_BYTE_ORDER == G_BIG_ENDIAN)
+#define FLUID_IS_BIG_ENDIAN       false
 
 #define FLUID_LE32TOH(x)          le32toh(x)
 #define FLUID_LE16TOH(x)          le16toh(x)
