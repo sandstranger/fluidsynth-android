@@ -199,6 +199,13 @@
 /* Define to do all DSP in single floating point precision */
 /* #undef WITH_FLOAT */
 
+#define HAVE_SINF 1
+#define HAVE_COSF 1
+#define HAVE_FABSF 1
+#define HAVE_POWF 1
+#define HAVE_SQRTF 1
+#define HAVE_LOGF 1
+
 /* Define to profile the DSP code */
 /* #undef WITH_PROFILING */
 
