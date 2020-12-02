@@ -1,6 +1,6 @@
 {
     "schema_version": 1,
-    "name": "fluidsynth-android",
+    "name": "fluidsynth",
     "version": "VERSION",
     "dependencies": []
 }
