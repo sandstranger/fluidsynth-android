@@ -19,92 +19,176 @@
 
 # CMake based build system. Pedro Lopez-Cabanillas <plcl@users.sf.net>
 
-if ( ANDROID )
+if ( ANDROID_ABI )
 enable_language(C)
 cmake_minimum_required(VERSION 3.4.1)
 
-set(fluidsynth_sources
-        src/midi/fluid_midi.c
-        src/midi/fluid_midi_router.c
-        src/midi/fluid_seq.c
-        src/midi/fluid_seqbind.c
-        src/rvoice/fluid_adsr_env.c
-        src/rvoice/fluid_chorus.c
-        src/rvoice/fluid_iir_filter.c
-        src/rvoice/fluid_lfo.c
-        src/rvoice/fluid_rev.c
-        src/rvoice/fluid_rvoice.c
-        src/rvoice/fluid_rvoice_dsp.c
-        src/rvoice/fluid_rvoice_event.c
-        src/rvoice/fluid_rvoice_mixer.c
-        src/sfloader/fluid_defsfont.c
-        src/sfloader/fluid_sfont.c
-        src/sfloader/fluid_sffile.c
-        src/sfloader/fluid_samplecache.c
-        src/synth/fluid_chan.c
-        src/synth/fluid_event.c
-        src/synth/fluid_gen.c
-        src/synth/fluid_mod.c
-        src/synth/fluid_synth.c
-        src/synth/fluid_tuning.c
-        src/synth/fluid_voice.c
-        src/synth/fluid_synth_monopoly.c
-        src/utils/fluid_conv.c
-        src/utils/fluid_hash.c
-        src/utils/fluid_list.c
-        src/utils/fluid_ringbuffer.c
-        src/utils/fluid_settings.c
-        src/bindings/fluid_filerenderer.c
-        src/utils/fluid_sys.c
-        android/src/bindings/fluid_cmd.c
-        src/drivers/fluid_adriver.c
-        src/drivers/fluid_mdriver.c
+# FluidSynth package name
+set ( PACKAGE "fluidsynth" )
+
+# FluidSynth package version
+set ( FLUIDSYNTH_VERSION_MAJOR 2 )
+set ( FLUIDSYNTH_VERSION_MINOR 1 )
+set ( FLUIDSYNTH_VERSION_MICRO 0 )
+set ( VERSION "${FLUIDSYNTH_VERSION_MAJOR}.${FLUIDSYNTH_VERSION_MINOR}.${FLUIDSYNTH_VERSION_MICRO}" )
+set ( FLUIDSYNTH_VERSION "\"${VERSION}\"" )
+
+include_directories (
+    android
+    ${CMAKE_BINARY_DIR}
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/drivers
+    ${CMAKE_SOURCE_DIR}/src/synth
+    ${CMAKE_SOURCE_DIR}/src/rvoice
+    ${CMAKE_SOURCE_DIR}/src/midi
+    ${CMAKE_SOURCE_DIR}/src/utils
+    ${CMAKE_SOURCE_DIR}/src/sfloader
+    ${CMAKE_SOURCE_DIR}/src/bindings
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_BINARY_DIR}/include
+)
+
+set ( config_SOURCES android/config.h )
+
+set ( libfluidsynth_SOURCES
+    src/utils/fluid_conv.c
+    src/utils/fluid_conv.h
+    src/utils/fluid_hash.c
+    src/utils/fluid_hash.h
+    src/utils/fluid_list.c
+    src/utils/fluid_list.h
+    src/utils/fluid_ringbuffer.c
+    src/utils/fluid_ringbuffer.h
+    src/utils/fluid_settings.c
+    src/utils/fluid_settings.h
+    src/utils/fluidsynth_priv.h
+    src/utils/fluid_sys.c
+    src/utils/fluid_sys.h
+    src/sfloader/fluid_defsfont.c
+    src/sfloader/fluid_defsfont.h
+    src/sfloader/fluid_sfont.c
+    src/sfloader/fluid_sfont.h
+    src/sfloader/fluid_sffile.c
+    src/sfloader/fluid_sffile.h
+    src/sfloader/fluid_samplecache.c
+    src/sfloader/fluid_samplecache.h
+    src/rvoice/fluid_adsr_env.c
+    src/rvoice/fluid_adsr_env.h
+    src/rvoice/fluid_chorus.c
+    src/rvoice/fluid_chorus.h
+    src/rvoice/fluid_iir_filter.c
+    src/rvoice/fluid_iir_filter.h
+    src/rvoice/fluid_lfo.c
+    src/rvoice/fluid_lfo.h
+    src/rvoice/fluid_rvoice.c
+    src/rvoice/fluid_rvoice.h
+    src/rvoice/fluid_rvoice_dsp.c
+    src/rvoice/fluid_rvoice_event.c
+    src/rvoice/fluid_rvoice_event.h
+    src/rvoice/fluid_rvoice_mixer.c
+    src/rvoice/fluid_rvoice_mixer.h
+    src/rvoice/fluid_phase.h
+    src/rvoice/fluid_rev.c
+    src/rvoice/fluid_rev.h
+    src/synth/fluid_chan.c
+    src/synth/fluid_chan.h
+    src/synth/fluid_event.c
+    src/synth/fluid_event.h
+    src/synth/fluid_gen.c
+    src/synth/fluid_gen.h
+    src/synth/fluid_mod.c
+    src/synth/fluid_mod.h
+    src/synth/fluid_synth.c
+    src/synth/fluid_synth.h
+    src/synth/fluid_synth_monopoly.c
+    src/synth/fluid_tuning.c
+    src/synth/fluid_tuning.h
+    src/synth/fluid_voice.c
+    src/synth/fluid_voice.h
+    src/midi/fluid_midi.c
+    src/midi/fluid_midi.h
+    src/midi/fluid_midi_router.c
+    src/midi/fluid_midi_router.h
+    src/midi/fluid_seqbind.c
+    src/midi/fluid_seq.c
+    src/drivers/fluid_adriver.c
+    src/drivers/fluid_adriver.h
+    src/drivers/fluid_mdriver.c
+    src/drivers/fluid_mdriver.h
+    src/bindings/fluid_filerenderer.c
+    android/src/bindings/fluid_cmd.c
+    src/bindings/fluid_cmd.h
+)
+
+set ( public_HEADERS
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/audio.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/event.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/gen.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/ladspa.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/log.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/midi.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/misc.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/mod.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/seq.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/seqbind.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/settings.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/sfont.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/shell.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/synth.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/types.h
+    ${CMAKE_SOURCE_DIR}/include/fluidsynth/voice.h
+    ${CMAKE_BINARY_DIR}/include/fluidsynth/version.h
 )
 
 set ( public_main_HEADER
     ${CMAKE_BINARY_DIR}/include/fluidsynth.h
 )
 
-configure_file ( include/fluidsynth.cmake
+configure_file ( ${CMAKE_SOURCE_DIR}/include/fluidsynth/version.h.in 
+                 ${CMAKE_BINARY_DIR}/include/fluidsynth/version.h )
+configure_file ( ${CMAKE_SOURCE_DIR}/include/fluidsynth.cmake
                  ${public_main_HEADER} )
 
-add_library(fluidsynth SHARED ${fluidsynth_sources})
+add_library ( libfluidsynth-OBJ OBJECT
+    ${config_SOURCES}
+    ${libfluidsynth_SOURCES}
+    ${public_HEADERS}
+    ${public_main_HEADER}
+)
 
 if(ANDROID_ABI STREQUAL "armeabi-v7a")
-        target_compile_options(fluidsynth PRIVATE -DWITH_FLOAT)
+        target_compile_options(libfluidsynth-OBJ PRIVATE -DWITH_FLOAT)
 endif()
 if(ANDROID_ABI STREQUAL "x86")
-        target_compile_options(fluidsynth PRIVATE -DWITH_FLOAT)
+        target_compile_options(libfluidsynth-OBJ PRIVATE -DWITH_FLOAT)
 endif()
 
-# Specify directories which the compiler should look for headers
-target_include_directories(fluidsynth PRIVATE
-                            android android/include
-                            include
-                            src
-                            src/synth
-                            src/midi
-                            src/rvoice
-                            src/sfloader
-                            src/utils
-                            src/bindings
-                            src/drivers
-                            ${CMAKE_BINARY_DIR}/include
-                            ${CMAKE_BINARY_DIR}
-                            )
+target_compile_options(libfluidsynth-OBJ
+                            PRIVATE
+                            -std=gnu11
+                            -Wall
+                            -DHAVE_CONFIG_H
+                            -Wno-unused-variable
+                            -Wno-error=format
+                            "$<$<CONFIG:DEBUG>:-Werror>" # Only include -Werror when building debug config
+)
 
-target_include_directories(fluidsynth INTERFACE
-                            android android/include
-                            include
-                            ${CMAKE_BINARY_DIR}/include
-                            )
+add_library ( libfluidsynth $<TARGET_OBJECTS:libfluidsynth-OBJ> )
 
-target_compile_options(fluidsynth PRIVATE -std=gnu11
-                            PRIVATE -Wall
-                            PRIVATE -DHAVE_CONFIG_H
-                            PRIVATE -Wno-unused-variable
-                            PRIVATE -Wno-error=format
-                            PRIVATE "$<$<CONFIG:DEBUG>:-Werror>") # Only include -Werror when building debug config
+set_target_properties ( libfluidsynth
+    PROPERTIES
+      PUBLIC_HEADER "${public_HEADERS}"
+      PREFIX "lib"
+      OUTPUT_NAME "fluidsynth"
+      VERSION ${LIB_VERSION_INFO}
+      SOVERSION ${LIB_VERSION_CURRENT}
+)
+
+install ( TARGETS libfluidsynth
+    LIBRARY DESTINATION lib/${ANDROID_ABI}
+    ARCHIVE DESTINATION lib/${ANDROID_ABI}
+)
+install ( FILES ${public_main_HEADER} DESTINATION include )
 
 # ******* Auto Generated Lookup Tables ******
 
@@ -115,10 +199,10 @@ ExternalProject_Add(gentables
         BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/gentables
         INSTALL_COMMAND ${CMAKE_CURRENT_BINARY_DIR}/src/gentables/make_tables.exe "${CMAKE_BINARY_DIR}/"
         CMAKE_GENERATOR "Unix Makefiles"
-        )
-add_dependencies(fluidsynth gentables)
+)
+add_dependencies(libfluidsynth-OBJ gentables)
 
-else ( ANDROID )
+else ( ANDROID_ABI )
 
 cmake_minimum_required ( VERSION 3.1.0 ) # because of CMAKE_C_STANDARD
 project ( FluidSynth C )
@@ -910,4 +994,4 @@ set ( CPACK_STRIP_FILES ON )
 
 include ( CPack )
 
-endif ( ANDROID )
+endif ( ANDROID_ABI )
