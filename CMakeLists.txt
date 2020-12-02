@@ -187,6 +187,7 @@ set_target_properties ( libfluidsynth
 install ( TARGETS libfluidsynth
     LIBRARY DESTINATION lib/${ANDROID_ABI}
     ARCHIVE DESTINATION lib/${ANDROID_ABI}
+    PUBLIC_HEADER DESTINATION include/fluidsynth
 )
 install ( FILES ${public_main_HEADER} DESTINATION include )
 
