@@ -20,8 +20,9 @@
 # CMake based build system. Pedro Lopez-Cabanillas <plcl@users.sf.net>
 
 if ( ANDROID_ABI )
-enable_language(C)
 cmake_minimum_required(VERSION 3.4.1)
+
+project ( FluidSynth C )
 
 # FluidSynth package name
 set ( PACKAGE "fluidsynth" )
@@ -32,6 +33,21 @@ set ( FLUIDSYNTH_VERSION_MINOR 1 )
 set ( FLUIDSYNTH_VERSION_MICRO 0 )
 set ( VERSION "${FLUIDSYNTH_VERSION_MAJOR}.${FLUIDSYNTH_VERSION_MINOR}.${FLUIDSYNTH_VERSION_MICRO}" )
 set ( FLUIDSYNTH_VERSION "\"${VERSION}\"" )
+
+# libfluidsynth - Library version
+# *** NOTICE ***
+# Update library version upon each release (follow these steps in order)
+# if any source code changes: REVISION++
+# if any interfaces added/removed/changed: REVISION=0
+# if any interfaces removed/changed (compatibility broken): CURRENT++
+# if any interfaces have been added: AGE++
+# if any interfaces have been removed/changed (compatibility broken): AGE=0
+# This is not exactly the same algorithm as the libtool one, but the results are the same.
+set ( LIB_VERSION_CURRENT 2 )
+set ( LIB_VERSION_AGE 3 )
+set ( LIB_VERSION_REVISION 0 )
+set ( LIB_VERSION_INFO
+      "${LIB_VERSION_CURRENT}.${LIB_VERSION_AGE}.${LIB_VERSION_REVISION}" )
 
 include_directories (
     android

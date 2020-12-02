@@ -41,6 +41,7 @@ CMAKE_ARGS="-H. \
 
   pushd ${ABI_BUILD_DIR}
   make -j5
+  make install
   popd
 }
 
