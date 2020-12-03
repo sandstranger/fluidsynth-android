@@ -28,20 +28,20 @@ pushd build/prefab
   find . -name ".DS_Store" -delete
 
   # Write the version number into the various metadata files
-  mv fluidsynth-VERSION fluidsynth-$version
-  mv fluidsynth-VERSION.pom fluidsynth-$version.pom
-  sed -i '' -e "s/VERSION/${version}/g" fluidsynth-$version.pom fluidsynth-$version/prefab/prefab.json
+  mv fluidsynth-android-VERSION fluidsynth-android-$version
+  mv fluidsynth-android-VERSION.pom fluidsynth-android-$version.pom
+  sed -i '' -e "s/VERSION/${version}/g" fluidsynth-android-$version.pom fluidsynth-android-$version/prefab/prefab.json
 
   # Copy the headers
   pushd ../..
-  find include -name '*.h' | cpio -pdm build/prefab/fluidsynth-$version/prefab/modules/fluidsynth/
+  find include -name '*.h' | cpio -pdm build/prefab/fluidsynth-android-$version/prefab/modules/fluidsynth/
   popd
 
   # Copy the libraries
   for abi in ${ABIS[@]}
   do
     echo "Copying the ${abi} library"
-    cp -v "../../lib/${abi}/libfluidsynth.so" "fluidsynth-${version}/prefab/modules/fluidsynth/libs/android.${abi}/"
+    cp -v "../../lib/${abi}/libfluidsynth.so" "fluidsynth-android-${version}/prefab/modules/fluidsynth/libs/android.${abi}/"
   done
 
   # Verify the prefab packages
@@ -50,7 +50,7 @@ pushd build/prefab
 
     prefab --build-system cmake --platform android --os-version 29 \
         --stl c++_shared --ndk-version 21 --abi ${abi} \
-        --output prefab-output-tmp $(pwd)/fluidsynth-${version}/prefab
+        --output prefab-output-tmp $(pwd)/fluidsynth-android-${version}/prefab
 
     result=$?; if [[ $result == 0 ]]; then
       echo "${abi} package verified"
@@ -61,9 +61,9 @@ pushd build/prefab
   done
 
   # Zip into an AAR and move into parent dir
-  pushd fluidsynth-${version}
-    zip -r fluidsynth-${version}.aar . 2>/dev/null;
-    zip -Tv fluidsynth-${version}.aar 2>/dev/null;
+  pushd fluidsynth-android-${version}
+    zip -r fluidsynth-android-${version}.aar . 2>/dev/null;
+    zip -Tv fluidsynth-android-${version}.aar 2>/dev/null;
 
     # Verify that the aar contents are correct (see output below to verify)
     result=$?; if [[ $result == 0 ]]; then
@@ -73,12 +73,12 @@ pushd build/prefab
       exit 1
     fi
 
-    mv fluidsynth-${version}.aar ..
+    mv fluidsynth-android-${version}.aar ..
   popd
 
   # Zip the .aar and .pom files into a maven package
-  zip fluidsynth-${version}.zip fluidsynth-${version}.* 2>/dev/null;
-  zip -Tv fluidsynth-${version}.zip 2>/dev/null;
+  zip fluidsynth-android-${version}.zip fluidsynth-android-${version}.* 2>/dev/null;
+  zip -Tv fluidsynth-android-${version}.zip 2>/dev/null;
 
   # Verify that the zip contents are correct (see output below to verify)
   result=$?; if [[ $result == 0 ]]; then
@@ -89,4 +89,4 @@ pushd build/prefab
   fi
 popd
 
-echo "Prefab zip ready for deployment: ./build/prefab/fluidsynth-${version}.zip"
+echo "Prefab zip ready for deployment: ./build/prefab/fluidsynth-android-${version}.zip"

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <groupId>net.volcanomobile.fluidsynth</groupId>
-  <artifactId>fluidsynth</artifactId>
+  <groupId>net.volcanomobile.fluidsynth-android</groupId>
+  <artifactId>fluidsynth-android</artifactId>
   <version>VERSION</version>
   <packaging>aar</packaging>
-  <name>fluidsynth</name>
+  <name>fluidsynth-android</name>
   <description>The AAR for FluidSynth Android.</description>
   <url>https://github.com/VolcanoMobile/fluidsynth-android</url>
   <licenses>
