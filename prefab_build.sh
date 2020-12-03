@@ -33,7 +33,9 @@ pushd build/prefab
   sed -i '' -e "s/VERSION/${version}/g" fluidsynth-$version.pom fluidsynth-$version/prefab/prefab.json
 
   # Copy the headers
-  cp -R ../../include fluidsynth-$version/prefab/modules/fluidsynth/
+  pushd ../..
+  find include -name '*.h' | cpio -pdm build/prefab/fluidsynth-$version/prefab/modules/fluidsynth/
+  popd
 
   # Copy the libraries
   for abi in ${ABIS[@]}
