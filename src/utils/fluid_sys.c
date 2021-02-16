@@ -900,23 +900,6 @@ void fluid_profile_start_stop(unsigned int end_ticks, short clear_data)
  *
  */
 
-#if OLD_GLIB_THREAD_API
-
-/* Rather than inline this one, we just declare it as a function, to prevent
- * GCC warning about inline failure. */
-fluid_cond_t *
-new_fluid_cond(void)
-{
-    if(!g_thread_supported())
-    {
-        g_thread_init(NULL);
-    }
-
-    return g_cond_new();
-}
-
-#endif
-
 static fluid_thread_return_t
 fluid_thread_high_prio (void *data)
 {
