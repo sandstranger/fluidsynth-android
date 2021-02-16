@@ -231,7 +231,7 @@ set ( PACKAGE "fluidsynth" )
 # FluidSynth package version
 set ( FLUIDSYNTH_VERSION_MAJOR 2 )
 set ( FLUIDSYNTH_VERSION_MINOR 1 )
-set ( FLUIDSYNTH_VERSION_MICRO 0 )
+set ( FLUIDSYNTH_VERSION_MICRO 7 )
 set ( VERSION "${FLUIDSYNTH_VERSION_MAJOR}.${FLUIDSYNTH_VERSION_MINOR}.${FLUIDSYNTH_VERSION_MICRO}" )
 set ( FLUIDSYNTH_VERSION "\"${VERSION}\"" )
 
@@ -246,7 +246,7 @@ set ( FLUIDSYNTH_VERSION "\"${VERSION}\"" )
 # This is not exactly the same algorithm as the libtool one, but the results are the same.
 set ( LIB_VERSION_CURRENT 2 )
 set ( LIB_VERSION_AGE 3 )
-set ( LIB_VERSION_REVISION 0 )
+set ( LIB_VERSION_REVISION 7 )
 set ( LIB_VERSION_INFO
       "${LIB_VERSION_CURRENT}.${LIB_VERSION_AGE}.${LIB_VERSION_REVISION}" )
 
@@ -323,7 +323,9 @@ set(CMAKE_C_STANDARD 90)
 # Compile with position independent code if the user requested a shared lib, i.e. no PIC if static requested.
 # This is cmakes default behavior, but here it's explicitly required due to the use of libfluidsynth-OBJ as object library,
 # which would otherwise always be compiled without PIC.
-set ( CMAKE_POSITION_INDEPENDENT_CODE ${BUILD_SHARED_LIBS} )
+if ( NOT CMAKE_POSITION_INDEPENDENT_CODE )
+    set ( CMAKE_POSITION_INDEPENDENT_CODE ${BUILD_SHARED_LIBS} )
+endif ( NOT CMAKE_POSITION_INDEPENDENT_CODE )
 
 # the default global visibility level for all target
 # no visibility support on OS2
@@ -340,6 +342,7 @@ endif ( POLICY CMP0063 )
 include ( DefaultDirs )
 
 # Basic C library checks
+include ( CheckCCompilerFlag )
 include ( CheckSTDC )
 include ( CheckIncludeFile )
 include ( CheckFunctionExists )
@@ -382,13 +385,19 @@ if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_C
     set ( CMAKE_SHARED_LINKER_FLAGS
           "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--no-undefined" )
   endif ( NOT APPLE AND NOT OS2 )
-  
+
   # define some warning flags
   set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -W -Wpointer-arith -Wcast-qual -Wstrict-prototypes -Wno-unused-parameter -Wdeclaration-after-statement -Werror=implicit-function-declaration" )
-  
+  check_c_compiler_flag ( "-Werror=incompatible-pointer-types" HAVE_INCOMPATIBLE_POINTER_TYPES )
+  if ( HAVE_INCOMPATIBLE_POINTER_TYPES )
+    set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror=incompatible-pointer-types" )
+  endif ( HAVE_INCOMPATIBLE_POINTER_TYPES )
+
+  set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -W -Wpointer-arith -Wcast-qual -Wno-unused-parameter" )
+
   # prepend to build type specific flags, to allow users to override
   set ( CMAKE_C_FLAGS_DEBUG "-g ${CMAKE_C_FLAGS_DEBUG}" )
-  
+
   if ( CMAKE_C_COMPILER_ID STREQUAL "Intel" )
     # icc needs the restrict flag to recognize C99 restrict pointers
     set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -restrict" )
@@ -460,12 +469,12 @@ if ( WIN32 )
         string ( REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}" )
       endif ( ${flag_var} MATCHES "/MD" )
     endforeach ( flag_var )
-    
+
   else ( MSVC )
     # only set debug postfix if not MSVS building
     set ( CMAKE_DEBUG_POSTFIX "_debug" )
   endif ( MSVC )
-  
+
   # MinGW compiler (a Windows GCC port)
   if ( MINGW )
     set ( MINGW32 1 )
@@ -618,18 +627,6 @@ file(GLOB_RECURSE
      ${CMAKE_SOURCE_DIR}/*.[CHI]
      )
 
-# Adding clang-format target if executable is found
-# find_program ( CLANG_FORMAT "clang-format" )
-# if ( CLANG_FORMAT )
-#   add_custom_target(
-#     clang-format
-#     COMMAND ${CLANG_FORMAT}
-#     -i
-#     -style=file
-#     ${ALL_SOURCE_FILES}
-#     )
-# endif(CLANG_FORMAT)
-
 find_program ( ASTYLE "astyle" )
 if ( ASTYLE )
   add_custom_target(
@@ -653,17 +650,17 @@ if(NOT enable-pkgconfig)
     FIND_LIBRARY( GTHREAD_LIB NAMES gthread gthread-2.0 PATH GTHREAD_LIBRARY_DIR )
     FIND_PATH( GLIBH_DIR glib.h PATH GLIB_INCLUDE_DIR )
     FIND_PATH( GLIBCONF_DIR glibconfig.h PATH GLIBCONF_INCLUDE_DIR )
-    
+
     IF( GLIB_LIB MATCHES "GLIB_LIB-NOTFOUND" OR
             GTHREAD_LIB MATCHES "GTHREAD_LIB-NOTFOUND" OR
             GLIBH_DIR MATCHES "GLIBH_DIR-NOTFOUND" OR
             GLIBCONF_DIR MATCHES "GLIBCONF_DIR-NOTFOUND")
             message( WARNING "Not sure if I found GLIB, continuing anyway.")
     ENDIF()
-    
+
     SET( GLIB_INCLUDE_DIRS ${GLIBH_DIR} ${GLIBCONF_DIR} )
     SET( GLIB_LIBRARIES ${GLIB_LIB} ${GTHREAD_LIB} )
-    
+
     message( STATUS "GLIB_INCLUDE_DIRS: " ${GLIB_INCLUDE_DIRS} )
     message( STATUS "GLIB_LIBRARIES: " ${GLIB_LIBRARIES} )
 
@@ -718,7 +715,7 @@ else(NOT enable-pkgconfig)
     else ( enable-portaudio )
     unset_pkg_config ( PORTAUDIO )
     endif ( enable-portaudio )
-    
+
     unset ( JACK_SUPPORT CACHE )
     if ( enable-jack )
     pkg_check_modules ( JACK jack )
@@ -726,7 +723,7 @@ else(NOT enable-pkgconfig)
     else ( enable-jack )
     unset_pkg_config ( JACK )
     endif ( enable-jack )
-    
+
     unset ( LASH_SUPPORT CACHE )
     if ( enable-lash )
     pkg_check_modules ( LASH lash-1.0>=0.3 )
@@ -778,6 +775,32 @@ else(NOT enable-pkgconfig)
         unset_pkg_config ( SDL2 )
     endif ( enable-sdl2 )
 
+    unset ( OBOE_SUPPORT CACHE )
+    unset ( OBOE_LIBS CACHE )
+    if ( enable-oboe )
+    # enable C++ as it's needed for oboe
+    enable_language ( CXX )
+    pkg_check_modules ( OBOE oboe-1.0 )
+    if ( OBOE_FOUND )
+        set ( OBOE_SUPPORT 1 )
+        set ( OBOE_LIBS ${OBOE_LIBRARIES} )
+    endif ( OBOE_FOUND )
+    endif ( enable-oboe )
+
+    unset ( WITH_READLINE CACHE )
+    unset ( READLINE_LIBS CACHE )
+    if ( enable-readline )
+    pkg_check_modules ( READLINE readline )
+    if ( NOT READLINE_FOUND )
+        find_package ( READLINE )
+        set ( READLINE_FOUND ${HAVE_READLINE} )
+    endif ( NOT READLINE_FOUND )
+    if ( READLINE_FOUND )
+        set ( WITH_READLINE 1 )
+        set ( READLINE_LIBS ${READLINE_LIBRARIES} )
+    endif ( READLINE_FOUND )
+    endif ( enable-readline )
+
 endif(NOT enable-pkgconfig)
 
 unset ( AUFILE_SUPPORT CACHE )
@@ -816,29 +839,6 @@ if ( enable-opensles )
   endif ( OPENSLES_SUPPORT )
 endif ( enable-opensles )
 
-unset ( OBOE_SUPPORT CACHE )
-unset ( OBOE_LIBS CACHE )
-if ( enable-oboe )
-  # enable C++ as it's needed for oboe
-  enable_language ( CXX )
-  pkg_check_modules ( OBOE oboe-1.0 )
-  if ( OBOE_FOUND )
-    set ( OBOE_SUPPORT 1 )
-    set ( OBOE_LIBS ${OBOE_LIBRARIES} )
-  endif ( OBOE_FOUND )
-endif ( enable-oboe )
-
-unset ( WITH_READLINE CACHE )
-unset ( READLINE_LIBS CACHE )
-if ( enable-readline )
-  find_package ( Readline )
-  set ( FOUND_READLINE ${HAVE_READLINE} )
-  if ( HAVE_READLINE )
-    set ( WITH_READLINE 1 )
-    set ( READLINE_LIBS ${READLINE_LIBRARIES} )
-  endif ( HAVE_READLINE )
-endif ( enable-readline )
-
 unset ( ENABLE_MIXER_THREADS CACHE )
 if ( enable-threads )
   set ( ENABLE_MIXER_THREADS 1 )
@@ -852,7 +852,7 @@ if ( OpenMP_FOUND OR OpenMP_C_FOUND )
     if ( ( NOT OpenMP_C_SPEC_DATE LESS "201307" ) OR NOT ( OpenMP_C_VERSION VERSION_LESS "4.0" ) )
         set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}" )
         set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}" )
-        
+
         # currently no need to link against openMP runtime lib(s). If need be, uncomment below.
         #  set ( CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}" )
         #  set ( LIBFLUID_LIBS "${OpenMP_C_LIBRARIES};${LIBFLUID_LIBS}" )
@@ -918,6 +918,7 @@ link_directories (
     ${DBUS_LIBRARY_DIRS}
     ${SDL2_LIBRARY_DIRS}
     ${OBOE_LIBRARY_DIRS}
+    ${LIBINSTPATCH_LIBRARY_DIRS}
 )
 
 # Process subdirectories

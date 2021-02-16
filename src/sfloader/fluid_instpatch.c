@@ -44,9 +44,23 @@ enum
     MAX_INST_VOICES = 128,
 };
 
+int fluid_instpatch_supports_multi_init(void)
+{
+    guint major, minor, patch;
+    ipatch_version(&major, &minor, &patch);
+
+    /* libinstpatch <= 1.1.4 only supports calling ipatch_init() once */
+    return FLUID_VERSION_CHECK(major, minor, patch) > FLUID_VERSION_CHECK(1, 1, 4);
+}
+
 void fluid_instpatch_init(void)
 {
     ipatch_init();
+}
+
+void fluid_instpatch_deinit(void)
+{
+    ipatch_close();
 }
 
 static int delete_fluid_instpatch(fluid_instpatch_font_t *pfont);

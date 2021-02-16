@@ -83,7 +83,7 @@ struct _fluid_jack_midi_driver_t
     jack_port_t **midi_port; // array of midi port handles
     fluid_midi_parser_t *parser;
     int autoconnect_inputs;
-    int autoconnect_is_outdated;
+    fluid_atomic_int_t autoconnect_is_outdated;
 };
 
 static fluid_jack_client_t *new_fluid_jack_client(fluid_settings_t *settings,
@@ -136,7 +136,7 @@ fluid_jack_midi_autoconnect(jack_client_t *client, fluid_jack_midi_driver_t *mid
         jack_free(midi_source_ports);
     }
 
-    midi_driver->autoconnect_is_outdated = FALSE;
+    fluid_atomic_int_set(&midi_driver->autoconnect_is_outdated, FALSE);
 }
 
 /*
@@ -170,21 +170,26 @@ new_fluid_jack_client(fluid_settings_t *settings, int isaudio, void *driver)
             ((!isaudio && last_client->midi_driver == NULL) || (isaudio && last_client->audio_driver == NULL)))
     {
         client_ref = last_client;
-        last_client = NULL;         /* No more pairing for this client */
 
         /* Register ports */
-        if(fluid_jack_client_register_ports(driver, isaudio, client_ref->client, settings) != FLUID_OK)
+        if(fluid_jack_client_register_ports(driver, isaudio, client_ref->client, settings) == FLUID_OK)
         {
-            goto error_recovery;
-        }
+            last_client = NULL; /* No more pairing for this client */
 
-        if(isaudio)
-        {
-            fluid_atomic_pointer_set(&client_ref->audio_driver, driver);
+            if(isaudio)
+            {
+                fluid_atomic_pointer_set(&client_ref->audio_driver, driver);
+            }
+            else
+            {
+                fluid_atomic_pointer_set(&client_ref->midi_driver, driver);
+            }
         }
         else
         {
-            fluid_atomic_pointer_set(&client_ref->midi_driver, driver);
+            // do not free client_ref and do not goto error_recovery
+            // client_ref is being used by another audio or midi driver. Freeing it here will lead to a double free.
+            client_ref = NULL;
         }
 
         fluid_mutex_unlock(last_client_mutex);        /* -- unlock last_client */
@@ -353,7 +358,7 @@ fluid_jack_client_register_ports(void *driver, int isaudio, jack_client_t *clien
 
             if(dev->midi_port[i] == NULL)
             {
-                FLUID_LOG(FLUID_ERR, "Failed to create Jack MIDI port");
+                FLUID_LOG(FLUID_ERR, "Failed to create Jack MIDI port '%s'", name);
                 FLUID_FREE(dev->midi_port);
                 dev->midi_port = NULL;
                 return FLUID_FAILED;
@@ -393,7 +398,8 @@ fluid_jack_client_register_ports(void *driver, int isaudio, jack_client_t *clien
 
         if(dev->output_ports[0] == NULL || dev->output_ports[1] == NULL)
         {
-            FLUID_LOG(FLUID_ERR, "Failed to create Jack audio port");
+            FLUID_LOG(FLUID_ERR, "Failed to create Jack audio port '%s'",
+                      (dev->output_ports[0] == NULL ? (dev->output_ports[1] == NULL ? "left & right" : "left") : "right"));
             goto error_recovery;
         }
     }
@@ -484,7 +490,6 @@ fluid_jack_client_register_ports(void *driver, int isaudio, jack_client_t *clien
         }
     }
 
-
     /* Adjust sample rate to match JACK's */
     jack_srate = jack_get_sample_rate(client);
     FLUID_LOG(FLUID_DBG, "Jack engine sample rate: %lu", jack_srate);
@@ -493,15 +498,21 @@ fluid_jack_client_register_ports(void *driver, int isaudio, jack_client_t *clien
 
     if((unsigned long)sample_rate != jack_srate)
     {
-        FLUID_LOG(FLUID_INFO, "Jack sample rate mismatch, adjusting."
+        fluid_synth_t* synth;
+        if(fluid_jack_obtain_synth(settings, &synth) == FLUID_OK)
+        {
+            FLUID_LOG(FLUID_INFO, "Jack sample rate mismatch, adjusting."
                   " (synth.sample-rate=%lu, jackd=%lu)", (unsigned long)sample_rate, jack_srate);
-        fluid_settings_setnum(settings, "synth.sample-rate", jack_srate);
-    }
-
-    /* Changing sample rate is non RT, so make sure we process it and/or other things now */
-    if(dev->callback == NULL)
-    {
-        fluid_synth_process_event_queue(dev->data);
+            fluid_synth_set_sample_rate(synth, jack_srate);
+            /* Changing sample rate is non RT, so make sure we process it and/or other things now */
+            fluid_synth_process_event_queue(synth);
+        }
+        else
+        {
+            FLUID_LOG(FLUID_WARN, "Jack sample rate mismatch (synth.sample-rate=%lu, jackd=%lu)"
+            " impossible to adjust, because the settings object provided to new_fluid_audio_driver2() was not used to create a synth."
+            , (unsigned long)sample_rate, jack_srate);
+        }
     }
 
     return FLUID_OK;
@@ -697,7 +708,7 @@ fluid_jack_driver_process(jack_nframes_t nframes, void *arg)
 
     if(midi_driver)
     {
-        if(midi_driver->autoconnect_is_outdated)
+        if(fluid_atomic_int_get(&midi_driver->autoconnect_is_outdated))
         {
             fluid_jack_midi_autoconnect(client->client, midi_driver);
         }
@@ -809,7 +820,7 @@ fluid_jack_port_registration(jack_port_id_t port, int is_registering, void *arg)
 
     if(client_ref->midi_driver != NULL)
     {
-        client_ref->midi_driver->autoconnect_is_outdated = client_ref->midi_driver->autoconnect_inputs && is_registering != 0;
+        fluid_atomic_int_set(&client_ref->midi_driver->autoconnect_is_outdated, client_ref->midi_driver->autoconnect_inputs && is_registering != 0);
     }
 }
 
@@ -854,18 +865,17 @@ new_fluid_jack_midi_driver(fluid_settings_t *settings,
     }
 
     fluid_settings_getint(settings, "midi.autoconnect", &dev->autoconnect_inputs);
-    dev->autoconnect_is_outdated = dev->autoconnect_inputs;
+    fluid_atomic_int_set(&dev->autoconnect_is_outdated, dev->autoconnect_inputs);
 
     dev->client_ref = new_fluid_jack_client(settings, FALSE, dev);
 
     if(!dev->client_ref)
     {
-        FLUID_LOG(FLUID_PANIC, "Out of memory");
         goto error_recovery;
     }
 
     return (fluid_midi_driver_t *)dev;
-    
+
 error_recovery:
     delete_fluid_jack_midi_driver((fluid_midi_driver_t *)dev);
     return NULL;
@@ -885,6 +895,20 @@ delete_fluid_jack_midi_driver(fluid_midi_driver_t *p)
     delete_fluid_midi_parser(dev->parser);
     FLUID_FREE(dev->midi_port);
     FLUID_FREE(dev);
+}
+
+int fluid_jack_obtain_synth(fluid_settings_t *settings, fluid_synth_t **synth)
+{
+    void *data;
+
+    if(!fluid_settings_is_realtime(settings, "synth.gain") ||
+       (data = fluid_settings_get_user_data(settings, "synth.gain")) == NULL)
+    {
+        return FLUID_FAILED;
+    }
+
+    *synth = data;
+    return FLUID_OK;
 }
 
 #endif /* JACK_SUPPORT */

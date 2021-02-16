@@ -278,7 +278,7 @@ fluid_synth_init(void)
 {
 #ifdef TRAP_ON_FPE
     /* Turn on floating point exception traps */
-    feenableexcept(FE_DIVBYZERO | FE_UNDERFLOW | FE_OVERFLOW | FE_INVALID);
+    feenableexcept(FE_DIVBYZERO | FE_OVERFLOW | FE_INVALID);
 #endif
 
     init_dither();
@@ -463,10 +463,13 @@ fluid_synth_init(void)
     fluid_mod_set_dest(&custom_balance_mod, GEN_CUSTOM_BALANCE);     /* Destination: stereo balance */
     /* Amount: 96 dB of attenuation (on the opposite channel) */
     fluid_mod_set_amount(&custom_balance_mod, FLUID_PEAK_ATTENUATION); /* Amount: 960 */
-    
-#ifdef LIBINSTPATCH_SUPPORT
+
+#if defined(LIBINSTPATCH_SUPPORT)
     /* defer libinstpatch init to fluid_instpatch.c to avoid #include "libinstpatch.h" */
-    fluid_instpatch_init();
+    if(!fluid_instpatch_supports_multi_init())
+    {
+        fluid_instpatch_init();
+    }
 #endif
 }
 
@@ -532,7 +535,6 @@ fluid_sample_timer_t *new_fluid_sample_timer(fluid_synth_t *synth, fluid_timer_c
     }
 
     fluid_sample_timer_reset(synth, result);
-    result->isfinished = 0;
     result->data = data;
     result->callback = callback;
     result->next = synth->sample_timers;
@@ -564,6 +566,7 @@ void delete_fluid_sample_timer(fluid_synth_t *synth, fluid_sample_timer_t *timer
 void fluid_sample_timer_reset(fluid_synth_t *synth, fluid_sample_timer_t *timer)
 {
     timer->starttick = fluid_synth_get_ticks(synth);
+    timer->isfinished = 0;
 }
 
 /***************************************************************
@@ -594,10 +597,15 @@ static FLUID_INLINE unsigned int fluid_synth_get_min_note_length_LOCAL(fluid_syn
  * @param settings Configuration parameters to use (used directly).
  * @return New FluidSynth instance or NULL on error
  *
- * @note The @p settings parameter is used directly and should freed after
- * the synth has been deleted. Further note that you may modify FluidSettings of the
+ * @note The @p settings parameter is used directly, but the synth does not take ownership of it.
+ * Hence, the caller is responsible for freeing it, when no longer needed.
+ * Further note that you may modify FluidSettings of the
  * @p settings instance. However, only those FluidSettings marked as 'realtime' will
  * affect the synth immediately.
+ *
+ * @warning The @p settings object should only be used by a single synth at a time. I.e. creating
+ * multiple synth instances with a single @p settings object causes undefined behavior. Once the
+ * "single synth" has been deleted, you may use the @p settings object again for another synth.
  */
 fluid_synth_t *
 new_fluid_synth(fluid_settings_t *settings)
@@ -607,6 +615,7 @@ new_fluid_synth(fluid_settings_t *settings)
     char *important_channels;
     int i, nbuf, prio_level = 0;
     int with_ladspa = 0;
+    double sample_rate_min, sample_rate_max;
 
     /* initialize all the conversion tables and other stuff */
     if(fluid_atomic_int_compare_and_exchange(&fluid_synth_initialized, 0, 1))
@@ -625,6 +634,13 @@ new_fluid_synth(fluid_settings_t *settings)
 
     FLUID_MEMSET(synth, 0, sizeof(fluid_synth_t));
 
+#if defined(LIBINSTPATCH_SUPPORT)
+    if(fluid_instpatch_supports_multi_init())
+    {
+        fluid_instpatch_init();
+    }
+#endif
+
     fluid_rec_mutex_init(synth->mutex);
     fluid_settings_getint(settings, "synth.threadsafe-api", &synth->use_mutex);
     synth->public_api_count = 0;
@@ -637,6 +653,7 @@ new_fluid_synth(fluid_settings_t *settings)
 
     fluid_settings_getint(settings, "synth.polyphony", &synth->polyphony);
     fluid_settings_getnum(settings, "synth.sample-rate", &synth->sample_rate);
+    fluid_settings_getnum_range(settings, "synth.sample-rate", &sample_rate_min, &sample_rate_max);
     fluid_settings_getint(settings, "synth.midi-channels", &synth->midi_channels);
     fluid_settings_getint(settings, "synth.audio-channels", &synth->audio_channels);
     fluid_settings_getint(settings, "synth.audio-groups", &synth->audio_groups);
@@ -778,7 +795,9 @@ new_fluid_synth(fluid_settings_t *settings)
     /* Allocate event queue for rvoice mixer */
     /* In an overflow situation, a new voice takes about 50 spaces in the queue! */
     synth->eventhandler = new_fluid_rvoice_eventhandler(synth->polyphony * 64,
-                          synth->polyphony, nbuf, synth->effects_channels, synth->effects_groups, synth->sample_rate, synth->cores - 1, prio_level);
+                          synth->polyphony, nbuf, synth->effects_channels, synth->effects_groups,
+                          (fluid_real_t)sample_rate_max, synth->sample_rate,
+                          synth->cores - 1, prio_level);
 
     if(synth->eventhandler == NULL)
     {
@@ -992,6 +1011,50 @@ delete_fluid_synth(fluid_synth_t *synth)
 
     fluid_profiling_print();
 
+    /* unregister all real-time settings callback, to avoid a use-after-free when changing those settings after
+     * this synth has been deleted*/
+
+    fluid_settings_callback_num(synth->settings, "synth.gain",
+                                NULL, NULL);
+    fluid_settings_callback_int(synth->settings, "synth.polyphony",
+                                NULL, NULL);
+    fluid_settings_callback_int(synth->settings, "synth.device-id",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.overflow.percussion",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.overflow.sustained",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.overflow.released",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.overflow.age",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.overflow.volume",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.overflow.important",
+                                NULL, NULL);
+    fluid_settings_callback_str(synth->settings, "synth.overflow.important-channels",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.reverb.room-size",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.reverb.damp",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.reverb.width",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.reverb.level",
+                                NULL, NULL);
+    fluid_settings_callback_int(synth->settings, "synth.reverb.active",
+                                NULL, NULL);
+    fluid_settings_callback_int(synth->settings, "synth.chorus.active",
+                                NULL, NULL);
+    fluid_settings_callback_int(synth->settings, "synth.chorus.nr",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.chorus.level",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.chorus.depth",
+                                NULL, NULL);
+    fluid_settings_callback_num(synth->settings, "synth.chorus.speed",
+                                NULL, NULL);
+
     /* turn off all voices, needed to unload SoundFont data */
     if(synth->voice != NULL)
     {
@@ -1004,6 +1067,12 @@ delete_fluid_synth(fluid_synth_t *synth)
                 continue;
             }
 
+            /* WARNING: A this point we must ensure that the reference counter
+               of any soundfont sample owned by any rvoice belonging to the voice
+               are correctly decremented. This is the contrary part to
+               to fluid_voice_init() where the sample's reference counter is
+               incremented.
+            */
             fluid_voice_unlock_rvoice(voice);
             fluid_voice_overflow_rvoice_finished(voice);
 
@@ -1056,6 +1125,18 @@ delete_fluid_synth(fluid_synth_t *synth)
 
     delete_fluid_list(synth->loaders);
 
+    /* wait for and delete all the lazy sfont unloading timers */
+
+    for(list = synth->fonts_to_be_unloaded; list; list = fluid_list_next(list))
+    {
+        fluid_timer_t* timer = fluid_list_get(list);
+        // explicitly join to wait for the unload really to happen
+        fluid_timer_join(timer);
+        // delete_fluid_timer alone would stop the timer, even if it had not unloaded the soundfont yet
+        delete_fluid_timer(timer);
+    }
+
+    delete_fluid_list(synth->fonts_to_be_unloaded);
 
     if(synth->channel != NULL)
     {
@@ -1112,6 +1193,13 @@ delete_fluid_synth(fluid_synth_t *synth)
     fluid_rec_mutex_destroy(synth->mutex);
 
     FLUID_FREE(synth);
+
+#if defined(LIBINSTPATCH_SUPPORT)
+    if(fluid_instpatch_supports_multi_init())
+    {
+        fluid_instpatch_deinit();
+    }
+#endif
 }
 
 /**
@@ -3624,7 +3712,7 @@ fx[ ((k * fluid_synth_count_effects_channels() + j) * 2 + 1) % nfx ]  = right_bu
  * <code>0 <= j < fluid_synth_count_effects_channels()</code> is a zero-based index denoting the effect channel within
  * unit \p k.
  *
- * Any voice playing is assigned to audio channels based on the MIDI channel its playing on. Let \p chan be the
+ * Any playing voice is assigned to audio channels based on the MIDI channel it's playing on: Let \p chan be the
  * zero-based MIDI channel index an arbitrary voice is playing on. To determine the audio channel and effects unit it is
  * going to be rendered to use:
  *
@@ -3634,15 +3722,23 @@ fx[ ((k * fluid_synth_count_effects_channels() + j) * 2 + 1) % nfx ]  = right_bu
  *
  * @param synth FluidSynth instance
  * @param len Count of audio frames to synthesize and store in every single buffer provided by \p out and \p fx.
- * @param nfx Count of arrays in \c fx. Must be a multiple of 2 (because of stereo)
+ *  Zero value is permitted, the function does nothing and return FLUID_OK.
+ * @param nfx Count of arrays in \c fx. Must be a multiple of 2 (because of stereo).
  * and in the range <code>0 <= nfx/2 <= (fluid_synth_count_effects_channels() * fluid_synth_count_effects_groups())</code>.
+  Note that zero value is valid and allows to skip mixing effects in all fx output buffers.
  * @param fx Array of buffers to store effects audio to. Buffers may
-alias with buffers of \c out. NULL buffers are permitted and will cause to skip mixing any audio into that buffer.
+alias with buffers of \c out. Individual NULL buffers are permitted and will cause to skip mixing any audio into that buffer.
  * @param nout Count of arrays in \c out. Must be a multiple of 2
 (because of stereo) and in the range <code>0 <= nout/2 <= fluid_synth_count_audio_channels()</code>.
+ Note that zero value is valid and allows to skip mixing dry audio in all out output buffers.
  * @param out Array of buffers to store (dry) audio to. Buffers may
-alias with buffers of \c fx. NULL buffers are permitted and will cause to skip mixing any audio into that buffer.
- * @return #FLUID_OK on success, #FLUID_FAILED otherwise.
+alias with buffers of \c fx. Individual NULL buffers are permitted and will cause to skip mixing any audio into that buffer.
+ * @return #FLUID_OK on success,
+ * #FLUID_FAILED otherwise,
+ *  - <code>fx == NULL</code> while <code>nfx > 0</code>, or <code>out == NULL</code> while <code>nout > 0</code>.
+ *  - \c nfx or \c nout not multiple of 2.
+ *  - <code>len < 0</code>.
+ *  - \c nfx or \c nout exceed the range explained above.
  *
  * @parblock
  * @note The owner of the sample buffers must zero them out before calling this
@@ -3672,6 +3768,7 @@ fluid_synth_process(fluid_synth_t *synth, int len, int nfx, float *fx[],
     return fluid_synth_process_LOCAL(synth, len, nfx, fx, nout, out, fluid_synth_render_blocks);
 }
 
+/* declared public (instead of static) for testing purpose */
 int
 fluid_synth_process_LOCAL(fluid_synth_t *synth, int len, int nfx, float *fx[],
                     int nout, float *out[], int (*block_render_func)(fluid_synth_t *, int))
@@ -3686,8 +3783,23 @@ fluid_synth_process_LOCAL(fluid_synth_t *synth, int len, int nfx, float *fx[],
     float cpu_load;
 
     fluid_return_val_if_fail(synth != NULL, FLUID_FAILED);
+
+    /* fx NULL while nfx > 0 is invalid */
+    fluid_return_val_if_fail((fx != NULL) || (nfx == 0), FLUID_FAILED);
+    /* nfx must be multiple of 2. Note that 0 value is valid and
+       allows to skip mixing in fx output buffers
+    */
     fluid_return_val_if_fail(nfx % 2 == 0, FLUID_FAILED);
+
+    /* out NULL while nout > 0 is invalid */
+    fluid_return_val_if_fail((out != NULL) || (nout == 0), FLUID_FAILED);
+    /* nout must be multiple of 2. Note that 0 value is valid and
+       allows to skip mixing in out output buffers
+    */
     fluid_return_val_if_fail(nout % 2 == 0, FLUID_FAILED);
+
+    /* check len value. Note that 0 value is valid, the function does nothing and returns FLUID_OK.
+    */
     fluid_return_val_if_fail(len >= 0, FLUID_FAILED);
     fluid_return_val_if_fail(len != 0, FLUID_OK); // to avoid raising FE_DIVBYZERO below
 
@@ -3698,33 +3810,49 @@ fluid_synth_process_LOCAL(fluid_synth_t *synth, int len, int nfx, float *fx[],
     fluid_return_val_if_fail(0 <= nfx / 2 && nfx / 2 <= nfxchan * nfxunits, FLUID_FAILED);
     fluid_return_val_if_fail(0 <= nout / 2 && nout / 2 <= naudchan, FLUID_FAILED);
 
+    /* get internal mixer audio dry buffer's pointer (left and right channel) */
     fluid_rvoice_mixer_get_bufs(synth->eventhandler->mixer, &left_in, &right_in);
+    /* get internal mixer audio effect buffer's pointer (left and right channel) */
     fluid_rvoice_mixer_get_fx_bufs(synth->eventhandler->mixer, &fx_left_in, &fx_right_in);
+
+    /* Conversely to fluid_synth_write_float(),fluid_synth_write_s16() (which handle only one
+       stereo output) we don't want rendered audio effect mixed in internal audio dry buffers.
+       FALSE instructs the mixer that internal audio effects will be mixed in respective internal
+       audio effects buffers.
+    */
     fluid_rvoice_mixer_set_mix_fx(synth->eventhandler->mixer, FALSE);
 
 
     /* First, take what's still available in the buffer */
     count = 0;
+    /* synth->cur indicates if available samples are still in internal mixer buffer */
     num = synth->cur;
 
     buffered_blocks = (synth->cur + FLUID_BUFSIZE - 1) / FLUID_BUFSIZE;
     if(synth->cur < buffered_blocks * FLUID_BUFSIZE)
     {
+        /* yes, available sample are in internal mixer buffer */
         int available = (buffered_blocks * FLUID_BUFSIZE) - synth->cur;
         num = (available > len) ? len : available;
 
+        /* mixing dry samples (or skip if requested by the caller) */
         if(nout != 0)
         {
             for(i = 0; i < naudchan; i++)
             {
+                /* mix num left samples from input mixer buffer (left_in) at input offset
+                   synth->cur to output buffer (out_buf) at offset 0 */
                 float *out_buf = out[(i * 2) % nout];
                 fluid_synth_mix_single_buffer(out_buf, 0, left_in, synth->cur, i, num);
 
+                /* mix num right samples from input mixer buffer (right_in) at input offset
+                   synth->cur to output buffer (out_buf) at offset 0 */
                 out_buf = out[(i * 2 + 1) % nout];
                 fluid_synth_mix_single_buffer(out_buf, 0, right_in, synth->cur, i, num);
             }
         }
 
+        /* mixing effects samples (or skip if requested by the caller) */
         if(nfx != 0)
         {
             // loop over all effects units
@@ -3735,9 +3863,13 @@ fluid_synth_process_LOCAL(fluid_synth_t *synth, int len, int nfx, float *fx[],
                 {
                     int buf_idx = f * nfxchan + i;
 
+                    /* mix num left samples from input mixer buffer (fx_left_in) at input offset
+                       synth->cur to output buffer (out_buf) at offset 0 */
                     float *out_buf = fx[(buf_idx * 2) % nfx];
                     fluid_synth_mix_single_buffer(out_buf, 0, fx_left_in, synth->cur, buf_idx, num);
 
+                    /* mix num right samples from input mixer buffer (fx_right_in) at input offset
+                       synth->cur to output buffer (out_buf) at offset 0 */
                     out_buf = fx[(buf_idx * 2 + 1) % nfx];
                     fluid_synth_mix_single_buffer(out_buf, 0, fx_right_in, synth->cur, buf_idx, num);
                 }
@@ -3751,23 +3883,31 @@ fluid_synth_process_LOCAL(fluid_synth_t *synth, int len, int nfx, float *fx[],
     /* Then, render blocks and copy till we have 'len' samples  */
     while(count < len)
     {
+        /* always render full bloc multiple of FLUID_BUFSIZE */
         int blocksleft = (len - count + FLUID_BUFSIZE - 1) / FLUID_BUFSIZE;
+        /* render audio (dry and effect) to respective internal dry and effect buffers */
         int blockcount = block_render_func(synth, blocksleft);
 
         num = (blockcount * FLUID_BUFSIZE > len - count) ? len - count : blockcount * FLUID_BUFSIZE;
 
+        /* mixing dry samples (or skip if requested by the caller) */
         if(nout != 0)
         {
             for(i = 0; i < naudchan; i++)
             {
+                /* mix num left samples from input mixer buffer (left_in) at input offset
+                   0 to output buffer (out_buf) at offset count */
                 float *out_buf = out[(i * 2) % nout];
                 fluid_synth_mix_single_buffer(out_buf, count, left_in, 0, i, num);
 
+                /* mix num right samples from input mixer buffer (right_in) at input offset
+                   0 to output buffer (out_buf) at offset count */
                 out_buf = out[(i * 2 + 1) % nout];
                 fluid_synth_mix_single_buffer(out_buf, count, right_in, 0, i, num);
             }
         }
 
+        /* mixing effects samples (or skip if requested by the caller) */
         if(nfx != 0)
         {
             // loop over all effects units
@@ -3778,9 +3918,13 @@ fluid_synth_process_LOCAL(fluid_synth_t *synth, int len, int nfx, float *fx[],
                 {
                     int buf_idx = f * nfxchan + i;
 
+                    /* mix num left samples from input mixer buffer (fx_left_in) at input offset
+                       0 to output buffer (out_buf) at offset count */
                     float *out_buf = fx[(buf_idx * 2) % nfx];
                     fluid_synth_mix_single_buffer(out_buf, count, fx_left_in, 0, buf_idx, num);
 
+                    /* mix num right samples from input mixer buffer (fx_right_in) at input offset
+                       0 to output buffer (out_buf) at offset count */
                     out_buf = fx[(buf_idx * 2 + 1) % nfx];
                     fluid_synth_mix_single_buffer(out_buf, count, fx_right_in, 0, buf_idx, num);
                 }
@@ -3848,7 +3992,13 @@ fluid_synth_write_float_LOCAL(fluid_synth_t *synth, int len,
     fluid_return_val_if_fail(len >= 0, FLUID_FAILED);
     fluid_return_val_if_fail(len != 0, FLUID_OK); // to avoid raising FE_DIVBYZERO below
 
-    fluid_rvoice_mixer_set_mix_fx(synth->eventhandler->mixer, 1);
+    /* Conversely to fluid_synth_process() (which handle possible multiple stereo output),
+       we want rendered audio effect mixed in internal audio dry buffers.
+       TRUE instructs the mixer that internal audio effects will be mixed in first internal
+       audio dry buffers.
+    */
+    fluid_rvoice_mixer_set_mix_fx(synth->eventhandler->mixer, TRUE);
+    /* get first internal mixer audio dry buffer's pointer (left and right channel) */
     fluid_rvoice_mixer_get_bufs(synth->eventhandler->mixer, &left_in, &right_in);
 
     size = len;
@@ -3859,6 +4009,7 @@ fluid_synth_write_float_LOCAL(fluid_synth_t *synth, int len,
         /* fill up the buffers as needed */
         if(cur >= synth->curmax)
         {
+            /* render audio (dry and effect) to internal dry buffers */
             int blocksleft = (size + FLUID_BUFSIZE - 1) / FLUID_BUFSIZE;
             synth->curmax = FLUID_BUFSIZE * block_render_func(synth, blocksleft);
             fluid_rvoice_mixer_get_bufs(synth->eventhandler->mixer, &left_in, &right_in);
@@ -4006,7 +4157,13 @@ fluid_synth_write_s16(fluid_synth_t *synth, int len,
     fluid_return_val_if_fail(len >= 0, FLUID_FAILED);
     fluid_return_val_if_fail(len != 0, FLUID_OK); // to avoid raising FE_DIVBYZERO below
 
-    fluid_rvoice_mixer_set_mix_fx(synth->eventhandler->mixer, 1);
+    /* Conversely to fluid_synth_process() (which handle possible multiple stereo output),
+       we want rendered audio effect mixed in internal audio dry buffers.
+       TRUE instructs the mixer that internal audio effects will be mixed in first internal
+       audio dry buffers.
+    */
+    fluid_rvoice_mixer_set_mix_fx(synth->eventhandler->mixer, TRUE);
+    /* get first internal mixer audio dry buffer's pointer (left and right channel) */
     fluid_rvoice_mixer_get_bufs(synth->eventhandler->mixer, &left_in, &right_in);
 
     size = len;
@@ -4018,6 +4175,7 @@ fluid_synth_write_s16(fluid_synth_t *synth, int len,
         /* fill up the buffers as needed */
         if(cur >= synth->curmax)
         {
+            /* render audio (dry and effect) to internal dry buffers */
             int blocksleft = (size + FLUID_BUFSIZE - 1) / FLUID_BUFSIZE;
             synth->curmax = FLUID_BUFSIZE * fluid_synth_render_blocks(synth, blocksleft);
             fluid_rvoice_mixer_get_bufs(synth->eventhandler->mixer, &left_in, &right_in);
@@ -4137,7 +4295,21 @@ fluid_synth_check_finished_voices(fluid_synth_t *synth)
             }
             else if(synth->voice[j]->overflow_rvoice == fv)
             {
+                /* Unlock the overflow_rvoice of the voice.
+                   Decrement the reference count of the sample owned by this
+                   rvoice.
+                */
                 fluid_voice_overflow_rvoice_finished(synth->voice[j]);
+
+                /* Decrement synth active voice count. Must not be incorporated
+                   in fluid_voice_overflow_rvoice_finished() because
+                   fluid_voice_overflow_rvoice_finished() is called also
+                   at synth destruction and in this case the variable should be
+                   accessed via voice->channel->synth->active_voice_count.
+                   And for certain voices which are not playing, the field
+                   voice->channel is NULL.
+                */
+                synth->active_voice_count--;
                 break;
             }
         }
@@ -4385,6 +4557,7 @@ fluid_synth_alloc_voice(fluid_synth_t *synth, fluid_sample_t *sample,
                         int chan, int key, int vel)
 {
     fluid_return_val_if_fail(sample != NULL, NULL);
+    fluid_return_val_if_fail(sample->data != NULL, NULL);
     FLUID_API_ENTRY_CHAN(NULL);
     FLUID_API_RETURN(fluid_synth_alloc_voice_LOCAL(synth, sample, chan, key, vel, NULL));
 
@@ -4508,14 +4681,13 @@ fluid_synth_kill_by_exclusive_class_LOCAL(fluid_synth_t *synth,
     for(i = 0; i < synth->polyphony; i++)
     {
         fluid_voice_t *existing_voice = synth->voice[i];
-        int existing_excl_class = fluid_voice_gen_value(existing_voice, GEN_EXCLUSIVECLASS);
 
         /* If voice is playing, on the same channel, has same exclusive
          * class and is not part of the same noteon event (voice group), then kill it */
 
         if(fluid_voice_is_playing(existing_voice)
                 && fluid_voice_get_channel(existing_voice) == fluid_voice_get_channel(new_voice)
-                && existing_excl_class == excl_class
+                && fluid_voice_gen_value(existing_voice, GEN_EXCLUSIVECLASS) == excl_class
                 && fluid_voice_get_id(existing_voice) != fluid_voice_get_id(new_voice))
         {
             fluid_voice_kill_excl(existing_voice);
@@ -4641,11 +4813,25 @@ fluid_synth_sfload(fluid_synth_t *synth, const char *filename, int reset_presets
 }
 
 /**
- * Unload a SoundFont.
+ * Schedule a SoundFont for unloading.
+ *
+ * If the SoundFont isn't used anymore by any playing voices, it will be unloaded immediately.
+ *
+ * If any samples of the given SoundFont are still required by active voices,
+ * the SoundFont will be unloaded in a lazy manner, once those voices have finished synthesizing.
+ * If you call delete_fluid_synth(), all voices will be destroyed and the SoundFont
+ * will be unloaded in any case.
+ * Once this function returned, fluid_synth_sfcount() and similar functions will behave as if
+ * the SoundFont has already been unloaded, even though the lazy-unloading is still pending.
+ *
+ * @note This lazy-unloading mechanism was broken between FluidSynth 1.1.4 and 2.1.5 . As a
+ * consequence, SoundFonts scheduled for lazy-unloading may be never freed under certain
+ * conditions. Calling delete_fluid_synth() does not recover this situation either.
+ *
  * @param synth FluidSynth instance
  * @param id ID of SoundFont to unload
  * @param reset_presets TRUE to re-assign presets for all MIDI channels
- * @return #FLUID_OK on success, #FLUID_FAILED on error
+ * @return #FLUID_OK if the given @p id was found, #FLUID_FAILED otherwise.
  */
 int
 fluid_synth_sfunload(fluid_synth_t *synth, int id, int reset_presets)
@@ -4706,7 +4892,8 @@ fluid_synth_sfont_unref(fluid_synth_t *synth, fluid_sfont_t *sfont)
         } /* spin off a timer thread to unload the sfont later (SoundFont loader blocked unload) */
         else
         {
-            new_fluid_timer(100, fluid_synth_sfunload_callback, sfont, TRUE, TRUE, FALSE);
+            fluid_timer_t* timer = new_fluid_timer(100, fluid_synth_sfunload_callback, sfont, TRUE, FALSE, FALSE);
+            synth->fonts_to_be_unloaded = fluid_list_prepend(synth->fonts_to_be_unloaded, timer);
         }
     }
 }
@@ -6306,7 +6493,9 @@ fluid_synth_handle_midi_event(void *data, fluid_midi_event_t *event)
 }
 
 /**
- * Create and start voices using a preset and a MIDI note on event.
+ * Create and start voices using an arbitrary preset and a MIDI note on event.
+ *
+ * Using this function is only supported when the setting @c synth.dynamic-sample-loading is false!
  * @param synth FluidSynth instance
  * @param id Voice group ID to use (can be used with fluid_synth_stop()).
  * @param preset Preset to synthesize
@@ -6323,13 +6512,32 @@ int
 fluid_synth_start(fluid_synth_t *synth, unsigned int id, fluid_preset_t *preset,
                   int audio_chan, int chan, int key, int vel)
 {
-    int result;
+    int result, dynamic_samples;
     fluid_return_val_if_fail(preset != NULL, FLUID_FAILED);
     fluid_return_val_if_fail(key >= 0 && key <= 127, FLUID_FAILED);
     fluid_return_val_if_fail(vel >= 1 && vel <= 127, FLUID_FAILED);
     FLUID_API_ENTRY_CHAN(FLUID_FAILED);
-    synth->storeid = id;
-    result = fluid_preset_noteon(preset, synth, chan, key, vel);
+
+    fluid_settings_getint(fluid_synth_get_settings(synth), "synth.dynamic-sample-loading", &dynamic_samples);
+    if(dynamic_samples)
+    {
+        // The preset might not be currently used, thus its sample data may not be loaded.
+        // This guard is to avoid a NULL deref in rvoice_write().
+        FLUID_LOG(FLUID_ERR, "Calling fluid_synth_start() while synth.dynamic-sample-loading is enabled is not supported.");
+        // Although we would be able to select the preset (and load it's samples) we have no way to
+        // unselect the preset again in fluid_synth_stop(). Also dynamic sample loading was intended
+        // to be used only when presets have been selected on a MIDI channel.
+        // Note that even if the preset is currently selected on a channel, it could be unselected at
+        // any time. And we would end up with a NULL sample->data again, because we are not referencing
+        // the preset here. Thus failure is our only option.
+        result = FLUID_FAILED;
+    }
+    else
+    {
+        synth->storeid = id;
+        result = fluid_preset_noteon(preset, synth, chan, key, vel);
+    }
+
     FLUID_API_RETURN(result);
 }
 

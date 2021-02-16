@@ -599,6 +599,9 @@ fluid_source(fluid_cmd_handler_t *handler, const char *filename)
 
 /**
  * Get the user specific FluidSynth command file name.
+ *
+ * On Windows this is currently @c "%USERPROFILE%\fluidsynth.cfg".
+ * For anything else (except MACOS9) @c "$HOME/.fluidsynth".
  * @param buf Caller supplied string buffer to store file name to.
  * @param len Length of \a buf
  * @return Returns \a buf pointer or NULL if no user command file for this system type.
@@ -631,6 +634,9 @@ fluid_get_userconf(char *buf, int len)
 
 /**
  * Get the system FluidSynth command file name.
+ *
+ * Windows and MACOS9 do not have a system-wide config file currently. For anything else it
+ * returns @c "/etc/fluidsynth.conf".
  * @param buf Caller supplied string buffer to store file name to.
  * @param len Length of \a buf
  * @return Returns \a buf pointer or NULL if no system command file for this system type.
@@ -1908,14 +1914,10 @@ fluid_handle_get(void *data, int ac, char **av, fluid_ostream_t out)
 
     case FLUID_STR_TYPE:
     {
-        char *s;
+        char *s = NULL;
         fluid_settings_dupstr(handler->synth->settings, av[0], &s);       /* ++ alloc string */
         fluid_ostream_printf(out, "%s\n", s ? s : "NULL");
-
-        if(s)
-        {
-            FLUID_FREE(s);    /* -- free string */
-        }
+        FLUID_FREE(s);    /* -- free string */
 
         break;
     }
@@ -1993,14 +1995,10 @@ static void fluid_handle_settings_iter2(void *data, const char *name, int type)
 
     case FLUID_STR_TYPE:
     {
-        char *s;
+        char *s = NULL;
         fluid_settings_dupstr(d->synth->settings, name, &s);     /* ++ alloc string */
         fluid_ostream_printf(d->out, "%s\n", s ? s : "NULL");
-
-        if(s)
-        {
-            FLUID_FREE(s);    /* -- free string */
-        }
+        FLUID_FREE(s);    /* -- free string */
 
         break;
     }
@@ -2127,18 +2125,15 @@ fluid_handle_info(void *d, int ac, char **av, fluid_ostream_t out)
 
     case FLUID_STR_TYPE:
     {
-        char *s;
+        char *s = NULL;
         fluid_settings_dupstr(settings, av[0], &s);         /* ++ alloc string */
         fluid_ostream_printf(out, "%s:\n", av[0]);
         fluid_ostream_printf(out, "Type:          string\n");
         fluid_ostream_printf(out, "Value:         %s\n", s ? s : "NULL");
+        FLUID_FREE(s);    /* -- free string */
+
         fluid_settings_getstr_default(settings, av[0], &s);
         fluid_ostream_printf(out, "Default value: %s\n", s);
-
-        if(s)
-        {
-            FLUID_FREE(s);
-        }
 
         data.out = out;
         data.first = 1;
