@@ -23,6 +23,10 @@
 
 #include "fluidsynth_priv.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * fluid_audio_driver_t
  */
@@ -95,13 +99,29 @@ void fluid_core_audio_driver_settings(fluid_settings_t *settings);
 #if DSOUND_SUPPORT
 fluid_audio_driver_t *new_fluid_dsound_audio_driver(fluid_settings_t *settings,
         fluid_synth_t *synth);
+fluid_audio_driver_t *new_fluid_dsound_audio_driver2(fluid_settings_t *settings,
+        fluid_audio_func_t func,
+        void *data);
 void delete_fluid_dsound_audio_driver(fluid_audio_driver_t *p);
 void fluid_dsound_audio_driver_settings(fluid_settings_t *settings);
+#endif
+
+#if WASAPI_SUPPORT
+fluid_audio_driver_t *new_fluid_wasapi_audio_driver(fluid_settings_t *settings,
+        fluid_synth_t *synth);
+fluid_audio_driver_t *new_fluid_wasapi_audio_driver2(fluid_settings_t *settings,
+        fluid_audio_func_t func,
+        void *data);
+void delete_fluid_wasapi_audio_driver(fluid_audio_driver_t *p);
+void fluid_wasapi_audio_driver_settings(fluid_settings_t *settings);
 #endif
 
 #if WAVEOUT_SUPPORT
 fluid_audio_driver_t *new_fluid_waveout_audio_driver(fluid_settings_t *settings,
         fluid_synth_t *synth);
+fluid_audio_driver_t *new_fluid_waveout_audio_driver2(fluid_settings_t *settings,
+        fluid_audio_func_t func,
+        void *data);
 void delete_fluid_waveout_audio_driver(fluid_audio_driver_t *p);
 void fluid_waveout_audio_driver_settings(fluid_settings_t *settings);
 #endif
@@ -120,6 +140,14 @@ fluid_audio_driver_t *new_fluid_jack_audio_driver2(fluid_settings_t *settings,
 void delete_fluid_jack_audio_driver(fluid_audio_driver_t *p);
 void fluid_jack_audio_driver_settings(fluid_settings_t *settings);
 int fluid_jack_obtain_synth(fluid_settings_t *settings, fluid_synth_t **synth);
+#endif
+
+#if PIPEWIRE_SUPPORT
+fluid_audio_driver_t *new_fluid_pipewire_audio_driver(fluid_settings_t *settings, fluid_synth_t *synth);
+fluid_audio_driver_t *new_fluid_pipewire_audio_driver2(fluid_settings_t *settings,
+        fluid_audio_func_t func, void *data);
+void delete_fluid_pipewire_audio_driver(fluid_audio_driver_t *p);
+void fluid_pipewire_audio_driver_settings(fluid_settings_t *settings);
 #endif
 
 #if SNDMAN_SUPPORT
@@ -151,6 +179,8 @@ fluid_audio_driver_t *new_fluid_file_audio_driver(fluid_settings_t *settings,
 void delete_fluid_file_audio_driver(fluid_audio_driver_t *p);
 #endif
 
-
+#ifdef __cplusplus
+}
+#endif
 
 #endif  /* _FLUID_AUDRIVER_H */

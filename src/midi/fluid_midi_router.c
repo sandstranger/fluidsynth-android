@@ -68,11 +68,14 @@ struct _fluid_midi_router_rule_t
 
 
 /**
- * Create a new midi router.  The default rules will pass all events unmodified.
+ * Create a new midi router.
+ *
  * @param settings Settings used to configure MIDI router
  * @param handler MIDI event callback.
  * @param event_handler_data Caller defined data pointer which gets passed to 'handler'
  * @return New MIDI router instance or NULL on error
+ *
+ * The new router will start with default rules and therefore pass all events unmodified.
  *
  * The MIDI handler callback should process the possibly filtered/modified MIDI
  * events from the MIDI router and forward them on to a synthesizer for example.
@@ -151,10 +154,13 @@ delete_fluid_midi_router(fluid_midi_router_t *router)
 }
 
 /**
- * Set a MIDI router to use default "unity" rules. Such a router will pass all
- * events unmodified.
+ * Set a MIDI router to use default "unity" rules.
+ *
  * @param router Router to set to default rules.
  * @return #FLUID_OK on success, #FLUID_FAILED otherwise
+ *
+ * Such a router will pass all events unmodified.
+ *
  * @since 1.1.0
  */
 int
@@ -244,10 +250,13 @@ fluid_midi_router_set_default_rules(fluid_midi_router_t *router)
 }
 
 /**
- * Clear all rules in a MIDI router. Such a router will drop all events until
- * rules are added.
+ * Clear all rules in a MIDI router.
+ *
  * @param router Router to clear all rules from
  * @return #FLUID_OK on success, #FLUID_FAILED otherwise
+ *
+ * An empty router will drop all events until rules are added.
+ *
  * @since 1.1.0
  */
 int
@@ -357,11 +366,13 @@ fluid_midi_router_add_rule(fluid_midi_router_t *router, fluid_midi_router_rule_t
 
 /**
  * Create a new MIDI router rule.
+ *
  * @return Newly allocated router rule or NULL if out of memory.
- * @since 1.1.0
  *
  * The new rule is a "unity" rule which will accept any values and wont modify
  * them.
+ *
+ * @since 1.1.0
  */
 fluid_midi_router_rule_t *
 new_fluid_midi_router_rule(void)
@@ -396,11 +407,13 @@ new_fluid_midi_router_rule(void)
 
 /**
  * Free a MIDI router rule.
+ *
  * @param rule Router rule to free
- * @since 1.1.0
  *
  * Note that rules which have been added to a router are managed by the router,
  * so this function should seldom be needed.
+ *
+ * @since 1.1.0
  */
 void
 delete_fluid_midi_router_rule(fluid_midi_router_rule_t *rule)
@@ -411,12 +424,12 @@ delete_fluid_midi_router_rule(fluid_midi_router_rule_t *rule)
 
 /**
  * Set the channel portion of a rule.
+ *
  * @param rule MIDI router rule
  * @param min Minimum value for rule match
  * @param max Maximum value for rule match
  * @param mul Value which is multiplied by matching event's channel value (1.0 to not modify)
  * @param add Value which is added to matching event's channel value (0 to not modify)
- * @since 1.1.0
  *
  * The \a min and \a max parameters define a channel range window to match
  * incoming events to.  If \a min is less than or equal to \a max then an event
@@ -426,6 +439,8 @@ delete_fluid_midi_router_rule(fluid_midi_router_rule_t *rule)
  *
  * The \a mul and \a add values are used to modify event channel values prior to
  * sending the event, if the rule matches.
+ *
+ * @since 1.1.0
  */
 void
 fluid_midi_router_rule_set_chan(fluid_midi_router_rule_t *rule, int min, int max,
@@ -440,12 +455,12 @@ fluid_midi_router_rule_set_chan(fluid_midi_router_rule_t *rule, int min, int max
 
 /**
  * Set the first parameter portion of a rule.
+ *
  * @param rule MIDI router rule
  * @param min Minimum value for rule match
  * @param max Maximum value for rule match
  * @param mul Value which is multiplied by matching event's 1st parameter value (1.0 to not modify)
  * @param add Value which is added to matching event's 1st parameter value (0 to not modify)
- * @since 1.1.0
  *
  * The 1st parameter of an event depends on the type of event.  For note events
  * its the MIDI note #, for CC events its the MIDI control number, for program
@@ -464,6 +479,8 @@ fluid_midi_router_rule_set_chan(fluid_midi_router_rule_t *rule, int min, int max
  *
  * The \a mul and \a add values are used to modify event 1st parameter values prior to
  * sending the event, if the rule matches.
+ *
+ * @since 1.1.0
  */
 void
 fluid_midi_router_rule_set_param1(fluid_midi_router_rule_t *rule, int min, int max,
@@ -478,12 +495,12 @@ fluid_midi_router_rule_set_param1(fluid_midi_router_rule_t *rule, int min, int m
 
 /**
  * Set the second parameter portion of a rule.
+ *
  * @param rule MIDI router rule
  * @param min Minimum value for rule match
  * @param max Maximum value for rule match
  * @param mul Value which is multiplied by matching event's 2nd parameter value (1.0 to not modify)
  * @param add Value which is added to matching event's 2nd parameter value (0 to not modify)
- * @since 1.1.0
  *
  * The 2nd parameter of an event depends on the type of event.  For note events
  * its the MIDI velocity, for CC events its the control value and for key pressure
@@ -499,6 +516,8 @@ fluid_midi_router_rule_set_param1(fluid_midi_router_rule_t *rule, int min, int m
  *
  * The \a mul and \a add values are used to modify event 2nd parameter values prior to
  * sending the event, if the rule matches.
+ *
+ * @since 1.1.0
  */
 void
 fluid_midi_router_rule_set_param2(fluid_midi_router_rule_t *rule, int min, int max,
@@ -517,7 +536,10 @@ fluid_midi_router_rule_set_param2(fluid_midi_router_rule_t *rule, int min, int m
  *   this function can be used as a callback for other subsystems
  *   (new_fluid_midi_driver() for example).
  * @param event MIDI event to handle
- * @return #FLUID_OK on success, #FLUID_FAILED otherwise
+ * @return #FLUID_OK if all rules were applied successfully, #FLUID_FAILED if
+ *  an error occurred while applying a rule or (since 2.2.2) the event was
+ *  ignored because a parameter was out-of-range after the rule had been applied.
+ *  See the note below.
  *
  * Purpose: The midi router is called for each event, that is received
  * via the 'physical' midi input. Each event can trigger an arbitrary number
@@ -535,6 +557,17 @@ fluid_midi_router_rule_set_param2(fluid_midi_router_rule_t *rule, int min, int m
  * - velocity switching ("v <=100: Angel Choir; V > 100: Hell's Bells")
  * - get rid of aftertouch
  * - ...
+ *
+ * @note Each input event has values (ch, par1, par2) that could be changed by a rule.
+ * After a rule has been applied on any value and the value is out of range, the event
+ * can be either ignored or the value can be clamped depending on the type of the event:
+ * - To get full benefice of the rule the value is clamped and the event passed to the output.
+ * - To avoid MIDI messages conflicts at the output, the event is ignored
+ *   (i.e not passed to the output).
+ *   - ch out of range: event is ignored regardless of the event type.
+ *   - par1 out of range: event is ignored for PROG_CHANGE or CONTROL_CHANGE type,
+ *     par1 is clamped otherwise.
+ *   - par2 out of range: par2 is clamped regardless of the event type.
  */
 int
 fluid_midi_router_handle_midi_event(void *data, fluid_midi_event_t *event)
@@ -542,6 +575,9 @@ fluid_midi_router_handle_midi_event(void *data, fluid_midi_event_t *event)
     fluid_midi_router_t *router = (fluid_midi_router_t *)data;
     fluid_midi_router_rule_t **rulep, *rule, *next_rule, *prev_rule = NULL;
     int event_has_par2 = 0; /* Flag, indicates that current event needs two parameters */
+    int is_par1_ignored = 0; /* Flag, indicates that current event should be
+                                ignored/clamped when par1 is getting out of range
+                                value after the rule had been applied:1:ignored, 0:clamped */
     int par1_max = 127;     /* Range limit for par1 */
     int par2_max = 127;     /* Range limit for par2 */
     int ret_val = FLUID_OK;
@@ -566,34 +602,50 @@ fluid_midi_router_handle_midi_event(void *data, fluid_midi_event_t *event)
     /* Depending on the event type, choose the correct list of rules. */
     switch(event->type)
     {
+    /* For NOTE_ON event, par1(pitch) and par2(velocity) will be clamped if
+       they are out of range after the rule had been applied */
     case NOTE_ON:
         rulep = &router->rules[FLUID_MIDI_ROUTER_RULE_NOTE];
         event_has_par2 = 1;
         break;
 
+    /* For NOTE_OFF event, par1(pitch) and par2(velocity) will be clamped if
+       they are out of range after the rule had been applied */
     case NOTE_OFF:
         rulep = &router->rules[FLUID_MIDI_ROUTER_RULE_NOTE];
         event_has_par2 = 1;
         break;
 
+    /* CONTROL_CHANGE event will be ignored if par1 (ctrl num) is out
+       of range after the rule had been applied */
     case CONTROL_CHANGE:
         rulep = &router->rules[FLUID_MIDI_ROUTER_RULE_CC];
         event_has_par2 = 1;
+        is_par1_ignored = 1;
         break;
 
+    /* PROGRAM_CHANGE event will be ignored if par1 (program num) is out
+       of range after the rule had been applied */
     case PROGRAM_CHANGE:
         rulep = &router->rules[FLUID_MIDI_ROUTER_RULE_PROG_CHANGE];
+        is_par1_ignored = 1;
         break;
 
+    /* For PITCH_BEND event, par1(bend value) will be clamped if
+       it is out of range after the rule had been applied */
     case PITCH_BEND:
         rulep = &router->rules[FLUID_MIDI_ROUTER_RULE_PITCH_BEND];
         par1_max = 16383;
         break;
 
+    /* For CHANNEL_PRESSURE event, par1(pressure value) will be clamped if
+       it is out of range after the rule had been applied */
     case CHANNEL_PRESSURE:
         rulep = &router->rules[FLUID_MIDI_ROUTER_RULE_CHANNEL_PRESSURE];
         break;
 
+    /* For KEY_PRESSURE event, par1(pitch) and par2(pressure value) will be
+       clamped if they are out of range after the rule had been applied */
     case KEY_PRESSURE:
         rulep = &router->rules[FLUID_MIDI_ROUTER_RULE_KEY_PRESSURE];
         event_has_par2 = 1;
@@ -681,44 +733,46 @@ fluid_midi_router_handle_midi_event(void *data, fluid_midi_event_t *event)
         chan = rule->chan_add + (int)((fluid_real_t)event->channel * rule->chan_mul
                      + (fluid_real_t)0.5);
 
-        /* Par 1 scaling / offset */
+        /* We ignore the event if chan is out of range */
+        if((chan < 0) || (chan >= router->nr_midi_channels))
+        {
+            ret_val = FLUID_FAILED;
+            continue; /* go to next rule */
+        }
+
+        /* par 1 scaling / offset */
         par1 = rule->par1_add + (int)((fluid_real_t)event_par1 * rule->par1_mul
                      + (fluid_real_t)0.5);
 
-        /* Par 2 scaling / offset, if applicable */
+        if(is_par1_ignored)
+        {
+            /* We ignore the event if par1 is out of range */
+            if((par1 < 0) || (par1 > par1_max))
+            {
+                ret_val = FLUID_FAILED;
+                continue; /* go to next rule */
+            }
+        }
+        else
+        {
+            /* par1 range clamping */
+            if(par1 < 0)
+            {
+                par1 = 0;
+            }
+            else if(par1 > par1_max)
+            {
+                par1 = par1_max;
+            }
+        }
+
+        /* par 2 scaling / offset, if applicable */
         if(event_has_par2)
         {
             par2 = rule->par2_add + (int)((fluid_real_t)event_par2 * rule->par2_mul
                          + (fluid_real_t)0.5);
-        }
-        else
-        {
-            par2 = 0;
-        }
 
-        /* Channel range limiting */
-        if(chan < 0)
-        {
-            chan = 0;
-        }
-        else if(chan >= router->nr_midi_channels)
-        {
-            chan = router->nr_midi_channels - 1;
-        }
-
-        /* Par1 range limiting */
-        if(par1 < 0)
-        {
-            par1 = 0;
-        }
-        else if(par1 > par1_max)
-        {
-            par1 = par1_max;
-        }
-
-        /* Par2 range limiting */
-        if(event_has_par2)
-        {
+            /* par2 range clamping */
             if(par2 < 0)
             {
                 par2 = 0;
@@ -727,6 +781,10 @@ fluid_midi_router_handle_midi_event(void *data, fluid_midi_event_t *event)
             {
                 par2 = par2_max;
             }
+        }
+        else
+        {
+            par2 = 0;
         }
 
         /* At this point we have to create an event of event->type on 'chan' with par1 (maybe par2).
@@ -797,7 +855,7 @@ send_event:
         new_event.param1 = par1;
         new_event.param2 = par2;
 
-        /* FIXME - What should be done on failure?  For now continue to process events, but return failure to caller. */
+        /* On failure, continue to process events, but return failure to caller. */
         if(router->event_handler(router->event_handler_data, &new_event) != FLUID_OK)
         {
             ret_val = FLUID_FAILED;
@@ -855,6 +913,10 @@ int fluid_midi_dump_prerouter(void *data, fluid_midi_event_t *event)
                 event->channel, event->param1, event->param2);
         break;
 
+    case MIDI_SYSTEM_RESET:
+        fprintf(stdout, "event_pre_system_reset\n");
+        break;
+
     default:
         break;
     }
@@ -906,6 +968,10 @@ int fluid_midi_dump_postrouter(void *data, fluid_midi_event_t *event)
     case KEY_PRESSURE:
         fprintf(stdout, "event_post_kpress %i %i %i\n",
                 event->channel, event->param1, event->param2);
+        break;
+
+    case MIDI_SYSTEM_RESET:
+        fprintf(stdout, "event_post_system_reset\n");
         break;
 
     default:

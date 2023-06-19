@@ -130,6 +130,9 @@
 /* Define to enable JACK driver */
 #cmakedefine JACK_SUPPORT @JACK_SUPPORT@
 
+/* Define to enable PipeWire driver */
+#cmakedefine PIPEWIRE_SUPPORT @PIPEWIRE_SUPPORT@
+
 /* Include the LADSPA Fx unit */
 #cmakedefine LADSPA @LADSPA_SUPPORT@
 
@@ -193,6 +196,9 @@
 /* Define to enable DirectSound driver */
 #cmakedefine DSOUND_SUPPORT @DSOUND_SUPPORT@
 
+/* Define to enable Windows WASAPI driver */
+#cmakedefine WASAPI_SUPPORT @WASAPI_SUPPORT@
+
 /* Define to enable Windows WaveOut driver */
 #cmakedefine WAVEOUT_SUPPORT @WAVEOUT_SUPPORT@
 
@@ -208,6 +214,11 @@
 /* Soundfont to load for unit testing */
 #cmakedefine TEST_SOUNDFONT "@TEST_SOUNDFONT@"
 
+/* Soundfont to load for UTF-8 unit testing */
+#cmakedefine TEST_SOUNDFONT_UTF8_1 "@TEST_SOUNDFONT_UTF8_1@"
+#cmakedefine TEST_SOUNDFONT_UTF8_2 "@TEST_SOUNDFONT_UTF8_2@"
+#cmakedefine TEST_MIDI_UTF8 "@TEST_MIDI_UTF8@"
+
 /* SF3 Soundfont to load for unit testing */
 #cmakedefine TEST_SOUNDFONT_SF3 "@TEST_SOUNDFONT_SF3@"
 
@@ -221,7 +232,7 @@
 #cmakedefine WITH_PROFILING @WITH_PROFILING@
 
 /* Define to use the readline library for line editing */
-#cmakedefine WITH_READLINE @WITH_READLINE@
+#cmakedefine READLINE_SUPPORT @READLINE_SUPPORT@
 
 /* Define if the compiler supports VLA */ 
 #cmakedefine SUPPORTS_VLA @SUPPORTS_VLA@ 
@@ -253,5 +264,8 @@
 
 /* Define to 1 if you have the logf() function. */
 #cmakedefine HAVE_LOGF @HAVE_LOGF@
+
+/* Define to 1 if you have the socklen_t type. */
+#cmakedefine HAVE_SOCKLEN_T @HAVE_SOCKLEN_T@
 
 #endif /* CONFIG_H */

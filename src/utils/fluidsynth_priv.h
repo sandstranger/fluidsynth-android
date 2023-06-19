@@ -29,9 +29,7 @@
 #ifndef _FLUIDSYNTH_PRIV_H
 #define _FLUIDSYNTH_PRIV_H
 
-#if HAVE_CONFIG_H
 #include "config.h"
-#endif
 
 #if HAVE_STDLIB_H
 #include <stdlib.h> // malloc, free
@@ -45,9 +43,15 @@
 #include <string.h>
 #endif
 
+#if HAVE_STRINGS_H
+#include <strings.h>
+#endif
 
 #include "fluidsynth.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /***************************************************************
  *
@@ -106,7 +110,7 @@ typedef union _fluid_rvoice_param_t
     int i;
     fluid_real_t real;
 } fluid_rvoice_param_t;
-enum { MAX_EVENT_PARAMS = 6 }; /**< Maximum number of #fluid_rvoice_param_t to be passed to an #fluid_rvoice_function_t */
+enum { MAX_EVENT_PARAMS = 7 }; /**< Maximum number of #fluid_rvoice_param_t to be passed to an #fluid_rvoice_function_t */
 typedef void (*fluid_rvoice_function_t)(void *obj, const fluid_rvoice_param_t param[MAX_EVENT_PARAMS]);
 
 /* Macro for declaring an rvoice event function (#fluid_rvoice_function_t). The functions may only access
@@ -199,11 +203,19 @@ typedef void (*fluid_rvoice_function_t)(void *obj, const fluid_rvoice_param_t pa
 void* fluid_alloc(size_t len);
 
 /* File access */
-#define FLUID_FOPEN(_f,_m)           fopen(_f,_m)
+#define FLUID_FOPEN(_f,_m)           fluid_fopen(_f,_m)
 #define FLUID_FCLOSE(_f)             fclose(_f)
 #define FLUID_FREAD(_p,_s,_n,_f)     fread(_p,_s,_n,_f)
+
+FILE *fluid_fopen(const char *filename, const char *mode);
+
+#ifdef _WIN32
+#define FLUID_FSEEK(_f,_n,_set)      _fseeki64(_f,_n,_set)
+#else
 #define FLUID_FSEEK(_f,_n,_set)      fseek(_f,_n,_set)
-#define FLUID_FTELL(_f)              ftell(_f)
+#endif
+
+#define FLUID_FTELL(_f)              fluid_file_tell(_f)
 
 /* Memory functions */
 #define FLUID_MEMCPY(_dst,_src,_n)   memcpy(_dst,_src,_n)
@@ -214,9 +226,10 @@ void* fluid_alloc(size_t len);
 #define FLUID_STRCMP(_s,_t)          strcmp(_s,_t)
 #define FLUID_STRNCMP(_s,_t,_n)      strncmp(_s,_t,_n)
 #define FLUID_STRCPY(_dst,_src)      strcpy(_dst,_src)
+#define FLUID_STRTOL(_s,_e,_b)       strtol(_s,_e,_b)
 
 #define FLUID_STRNCPY(_dst,_src,_n) \
-do { strncpy(_dst,_src,_n); \
+do { strncpy(_dst,_src,_n-1); \
     (_dst)[(_n)-1]='\0'; \
 }while(0)
 
@@ -232,7 +245,7 @@ do { strncpy(_dst,_src,_n); \
 #define FLUID_SPRINTF                sprintf
 #define FLUID_FPRINTF                fprintf
 
-#if (defined(WIN32) && _MSC_VER < 1900) || defined(MINGW32)
+#if (defined(_WIN32) && _MSC_VER < 1900) || defined(MINGW32)
 /* need to make sure we use a C99 compliant implementation of (v)snprintf(),
  * i.e. not microsofts non compliant extension _snprintf() as it doesn't
  * reliably null-terminate the buffer
@@ -242,19 +255,19 @@ do { strncpy(_dst,_src,_n); \
 #define FLUID_SNPRINTF           snprintf
 #endif
 
-#if (defined(WIN32) && _MSC_VER < 1500) || defined(MINGW32)
+#if (defined(_WIN32) && _MSC_VER < 1500) || defined(MINGW32)
 #define FLUID_VSNPRINTF          g_vsnprintf
 #else
 #define FLUID_VSNPRINTF          vsnprintf
 #endif
 
-#if defined(WIN32) && !defined(MINGW32)
+#if defined(_WIN32) && !defined(MINGW32)
 #define FLUID_STRCASECMP         _stricmp
 #else
 #define FLUID_STRCASECMP         strcasecmp
 #endif
 
-#if defined(WIN32) && !defined(MINGW32)
+#if defined(_WIN32) && !defined(MINGW32)
 #define FLUID_STRNCASECMP         _strnicmp
 #else
 #define FLUID_STRNCASECMP         strncasecmp
@@ -318,5 +331,8 @@ else \
 #define fluid_return_val_if_fail(cond, val) \
  fluid_return_if_fail(cond) (val)
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _FLUIDSYNTH_PRIV_H */

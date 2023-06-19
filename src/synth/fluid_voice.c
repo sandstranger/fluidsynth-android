@@ -370,6 +370,7 @@ fluid_voice_init(fluid_voice_t *voice, fluid_sample_t *sample,
 
 /**
  * Update sample rate.
+ *
  * @note If the voice is active, it will be turned off.
  */
 void
@@ -388,6 +389,7 @@ fluid_voice_set_output_rate(fluid_voice_t *voice, fluid_real_t value)
 
 /**
  * Set the value of a generator.
+ *
  * @param voice Voice instance
  * @param i Generator ID (#fluid_gen_type)
  * @param val Generator value
@@ -406,6 +408,7 @@ fluid_voice_gen_set(fluid_voice_t *voice, int i, float val)
 
 /**
  * Offset the value of a generator.
+ *
  * @param voice Voice instance
  * @param i Generator ID (#fluid_gen_type)
  * @param val Value to add to the existing value
@@ -419,6 +422,7 @@ fluid_voice_gen_incr(fluid_voice_t *voice, int i, float val)
 
 /**
  * Get the value of a generator.
+ *
  * @param voice Voice instance
  * @param gen Generator ID (#fluid_gen_type)
  * @return Current generator value
@@ -471,7 +475,7 @@ fluid_voice_calculate_gain_amplitude(const fluid_voice_t *voice, fluid_real_t ga
 }
 
 /* Useful to return the nominal pitch of a key */
-/* The nominal pitch is dependant of voice->root_pitch,tuning, and
+/* The nominal pitch is dependent of voice->root_pitch,tuning, and
    GEN_SCALETUNE generator.
    This is useful to set the value of GEN_PITCH generator on noteOn.
    This is useful to get the beginning/ending pitch for portamento.
@@ -666,6 +670,7 @@ calculate_hold_decay_buffers(fluid_voice_t *voice, int gen_base,
      * GEN_KEYTOVOLENVDECAY, GEN_KEYTOMODENVHOLD, GEN_KEYTOMODENVDECAY
      */
 
+    fluid_real_t keysteps;
     fluid_real_t timecents;
     fluid_real_t seconds;
     int buffers;
@@ -677,7 +682,9 @@ calculate_hold_decay_buffers(fluid_voice_t *voice, int gen_base,
      * will cause (60-72)*100=-1200 timecents of time variation.
      * The time is cut in half.
      */
-    timecents = (fluid_voice_gen_value(voice, gen_base) + fluid_voice_gen_value(voice, gen_key2base) * (fluid_real_t)(60 - fluid_voice_get_actual_key(voice)));
+
+    keysteps = 60.0f - fluid_channel_get_key_pitch(voice->channel, fluid_voice_get_actual_key(voice)) / 100.0f;
+    timecents = fluid_voice_gen_value(voice, gen_base) + fluid_voice_gen_value(voice, gen_key2base) * keysteps;
 
     /* Range checking */
     if(is_decay)
@@ -737,13 +744,14 @@ calculate_hold_decay_buffers(fluid_voice_t *voice, int gen_base,
  * NRPN system. fluid_voice_gen_value(voice, generator_enumerator) returns the sum
  * of all three.
  */
+
 /**
- * Update all the synthesis parameters, which depend on generator \a gen.
+ * Update all the synthesis parameters which depend on generator \a gen.
+ *
  * @param voice Voice instance
  * @param gen Generator id (#fluid_gen_type)
  *
- * This is only necessary after changing a generator of an already operating voice.
- * Most applications will not need this function.
+ * Calling this function is only necessary after changing a generator of an already playing voice.
  */
 void
 fluid_voice_update_param(fluid_voice_t *voice, int gen)
@@ -898,7 +906,7 @@ fluid_voice_update_param(fluid_voice_t *voice, int gen)
          * - the delay into a sample delay
          */
         fluid_clip(x, -16000.0f, 4500.0f);
-        x = (4.0f * FLUID_BUFSIZE * fluid_act2hz(x) / voice->output_rate);
+        x = (4.0f * FLUID_BUFSIZE * fluid_ct2hz_real(x) / voice->output_rate);
         UPDATE_RVOICE_ENVLFO_R1(fluid_lfo_set_incr, modlfo, x);
         break;
 
@@ -909,7 +917,7 @@ fluid_voice_update_param(fluid_voice_t *voice, int gen)
          * - the delay into a sample delay
          */
         fluid_clip(x, -16000.0f, 4500.0f);
-        x = 4.0f * FLUID_BUFSIZE * fluid_act2hz(x) / voice->output_rate;
+        x = 4.0f * FLUID_BUFSIZE * fluid_ct2hz_real(x) / voice->output_rate;
         UPDATE_RVOICE_ENVLFO_R1(fluid_lfo_set_incr, viblfo, x);
         break;
 
@@ -1102,8 +1110,9 @@ fluid_voice_update_param(fluid_voice_t *voice, int gen)
     /* Modulation envelope */
     case GEN_MODENVDELAY:               /* SF2.01 section 8.1.3 # 25 */
         fluid_clip(x, -12000.0f, 5000.0f);
+        count = NUM_BUFFERS_DELAY(x);
         fluid_voice_update_modenv(voice, TRUE, FLUID_VOICE_ENVDELAY,
-                                  NUM_BUFFERS_DELAY(x), 0.0f, 0.0f, -1.0f, 1.0f);
+                                  count, 0.0f, 0.0f, -1.0f, 1.0f);
         break;
 
     case GEN_MODENVATTACK:               /* SF2.01 section 8.1.3 # 26 */
@@ -1143,6 +1152,7 @@ fluid_voice_update_param(fluid_voice_t *voice, int gen)
 
 /**
  * Recalculate voice parameters for a given control.
+ *
  * @param voice the synthesis voice
  * @param cc flag to distinguish between a continuous control and a channel control (pitch bend, ...)
  * @param ctrl the control number:
@@ -1239,17 +1249,18 @@ int fluid_voice_modulate(fluid_voice_t *voice, int cc, int ctrl)
 }
 
 /**
- * Update all the modulators. This function is called after a
- * ALL_CTRL_OFF MIDI message has been received (CC 121).
+ * Update all the modulators.
  *
- * All destination of all modulators must be updated.
+ * This function is called after a ALL_CTRL_OFF MIDI message has been received (CC 121).
+ * All destinations of all modulators will be updated.
  */
 int fluid_voice_modulate_all(fluid_voice_t *voice)
 {
     return fluid_voice_modulate(voice, 0, -1);
 }
 
-/** legato update functions --------------------------------------------------*/
+/* legato update functions --------------------------------------------------*/
+
 /* Updates voice portamento parameters
  *
  * @voice voice the synthesis voice
@@ -1464,6 +1475,7 @@ fluid_voice_stop(fluid_voice_t *voice)
 
 /**
  * Adds a modulator to the voice if the modulator has valid sources.
+ *
  * @param voice Voice instance.
  * @param mod Modulator info (copied).
  * @param mode Determines how to handle an existing identical modulator.
@@ -1551,15 +1563,16 @@ fluid_voice_add_mod_local(fluid_voice_t *voice, fluid_mod_t *mod, int mode, int 
 
 /**
  * Get the unique ID of the noteon-event.
+ *
  * @param voice Voice instance
  * @return Note on unique ID
  *
- * A SoundFont loader may store the voice processes it has created for
+ * A SoundFont loader may store pointers to voices it has created for
  * real-time control during the operation of a voice (for example: parameter
- * changes in SoundFont editor). The synth uses a pool of voices, which are
+ * changes in SoundFont editor). The synth uses a pool of voices internally which are
  * 'recycled' and never deallocated.
  *
- * Before modifying an existing voice, check
+ * However, before modifying an existing voice, check
  * - that its state is still 'playing'
  * - that the ID is still the same
  *
@@ -1571,7 +1584,14 @@ unsigned int fluid_voice_get_id(const fluid_voice_t *voice)
 }
 
 /**
- * Check if a voice is producing sound. This is also true after a voice received a noteoff as it may be playing in release phase.
+ * Check if a voice is producing sound.
+ *
+ * Like fluid_voice_is_on() this will return TRUE once a call to 
+ * fluid_synth_start_voice() has been made. Contrary to fluid_voice_is_on(),
+ * this might also return TRUE after the voice received a noteoff event, as it may
+ * still be playing in release phase, or because it has been sustained or
+ * sostenuto'ed.
+ *
  * @param voice Voice instance
  * @return TRUE if playing, FALSE otherwise
  */
@@ -1584,9 +1604,15 @@ int fluid_voice_is_playing(const fluid_voice_t *voice)
 }
 
 /**
- * Check if a voice is ON. A voice is ON, if it has not yet received a noteoff event.
+ * Check if a voice is ON.
+ *
+ * A voice is in ON state as soon as a call to fluid_synth_start_voice() has been made
+ * (which is typically done in a fluid_preset_t's noteon function).
+ * A voice stays ON as long as it has not received a noteoff event.
+ *
  * @param voice Voice instance
  * @return TRUE if on, FALSE otherwise
+ *
  * @since 1.1.7
  */
 int fluid_voice_is_on(const fluid_voice_t *voice)
@@ -1596,8 +1622,10 @@ int fluid_voice_is_on(const fluid_voice_t *voice)
 
 /**
  * Check if a voice keeps playing after it has received a noteoff due to being held by sustain.
+ *
  * @param voice Voice instance
  * @return TRUE if sustained, FALSE otherwise
+ *
  * @since 1.1.7
  */
 int fluid_voice_is_sustained(const fluid_voice_t *voice)
@@ -1607,8 +1635,10 @@ int fluid_voice_is_sustained(const fluid_voice_t *voice)
 
 /**
  * Check if a voice keeps playing after it has received a noteoff due to being held by sostenuto.
+ *
  * @param voice Voice instance
  * @return TRUE if sostenuto, FALSE otherwise
+ *
  * @since 1.1.7
  */
 int fluid_voice_is_sostenuto(const fluid_voice_t *voice)
@@ -1617,9 +1647,13 @@ int fluid_voice_is_sostenuto(const fluid_voice_t *voice)
 }
 
 /**
- * If the voice is playing, gets the midi channel the voice is playing on. Else the result is undefined.
+ * Return the MIDI channel the voice is playing on.
+ *
  * @param voice Voice instance
  * @return The channel assigned to this voice
+ *
+ * @note The result of this function is only valid if the voice is playing.
+ *
  * @since 1.1.7
  */
 int fluid_voice_get_channel(const fluid_voice_t *voice)
@@ -1628,11 +1662,16 @@ int fluid_voice_get_channel(const fluid_voice_t *voice)
 }
 
 /**
- * If the voice is playing, gets the midi key the voice is actually playing at. Else the result is undefined.
- * If the voice was started from an instrument which uses a fixed key generator, it returns that.
- * Else returns the same as \c fluid_voice_get_key.
+ * Return the effective MIDI key of the playing voice.
+ *
  * @param voice Voice instance
- * @return The midi key this voice is playing at
+ * @return The MIDI key this voice is playing at
+ *
+ * If the voice was started from an instrument which uses a fixed key generator, it returns that.
+ * Otherwise returns the same value as \c fluid_voice_get_key.
+ *
+ * @note The result of this function is only valid if the voice is playing.
+ *
  * @since 1.1.7
  */
 int fluid_voice_get_actual_key(const fluid_voice_t *voice)
@@ -1650,10 +1689,13 @@ int fluid_voice_get_actual_key(const fluid_voice_t *voice)
 }
 
 /**
- * If the voice is playing, gets the midi key from the noteon event, by which the voice was initially turned on with.
- * Else the result is undefined.
+ * Return the MIDI key from the starting noteon event.
+ *
  * @param voice Voice instance
- * @return The midi key of the noteon event that originally turned on this voice
+ * @return The MIDI key of the noteon event that originally turned on this voice
+ *
+ * @note The result of this function is only valid if the voice is playing.
+ *
  * @since 1.1.7
  */
 int fluid_voice_get_key(const fluid_voice_t *voice)
@@ -1662,11 +1704,16 @@ int fluid_voice_get_key(const fluid_voice_t *voice)
 }
 
 /**
- * If the voice is playing, gets the midi velocity the voice is actually playing at. Else the result is undefined.
- * If the voice was started from an instrument which uses a fixed velocity generator, it returns that.
- * Else returns the same as \c fluid_voice_get_velocity.
+ * Return the effective MIDI velocity of the playing voice.
+ *
  * @param voice Voice instance
- * @return The midi velocity this voice is playing at
+ * @return The MIDI velocity this voice is playing at
+ *
+ * If the voice was started from an instrument which uses a fixed velocity generator, it returns that.
+ * Otherwise it returns the same value as \c fluid_voice_get_velocity.
+ *
+ * @note The result of this function is only valid if the voice is playing.
+ *
  * @since 1.1.7
  */
 int fluid_voice_get_actual_velocity(const fluid_voice_t *voice)
@@ -1684,10 +1731,13 @@ int fluid_voice_get_actual_velocity(const fluid_voice_t *voice)
 }
 
 /**
- * If the voice is playing, gets the midi velocity from the noteon event, by which the voice was initially
- * turned on with. Else the result is undefined.
+ * Return the MIDI velocity from the starting noteon event.
+ *
  * @param voice Voice instance
- * @return The midi velocity which originally turned on this voice
+ * @return The MIDI velocity which originally turned on this voice
+ *
+ * @note The result of this function is only valid if the voice is playing.
+ *
  * @since 1.1.7
  */
 int fluid_voice_get_velocity(const fluid_voice_t *voice)
@@ -1827,8 +1877,10 @@ int fluid_voice_set_gain(fluid_voice_t *voice, fluid_real_t gain)
  * - Calculate, what factor will make the loop inaudible
  * - Store in sample
  */
+
 /**
  * Calculate the peak volume of a sample for voice off optimization.
+ *
  * @param s Sample to optimize
  * @return #FLUID_OK on success, #FLUID_FAILED otherwise
  *

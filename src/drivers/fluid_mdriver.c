@@ -135,11 +135,14 @@ void fluid_midi_driver_settings(fluid_settings_t *settings)
 
 /**
  * Create a new MIDI driver instance.
- * @param settings Settings used to configure new MIDI driver.
+ *
+ * @param settings Settings used to configure new MIDI driver. See \ref settings_midi for available options.
  * @param handler MIDI handler callback (for example: fluid_midi_router_handle_midi_event()
  *   for MIDI router)
  * @param event_handler_data Caller defined data to pass to 'handler'
  * @return New MIDI driver instance or NULL on error
+ *
+ * Which MIDI driver is actually created depends on the \ref settings_midi_driver option.
  */
 fluid_midi_driver_t *new_fluid_midi_driver(fluid_settings_t *settings, handle_midi_event_func_t handler, void *event_handler_data)
 {
@@ -169,11 +172,11 @@ fluid_midi_driver_t *new_fluid_midi_driver(fluid_settings_t *settings, handle_mi
     {
         if(allnames[0] != '\0')
         {
-            FLUID_LOG(FLUID_INFO, "Valid drivers are: %s", allnames);
+            FLUID_LOG(FLUID_INFO, "This build of fluidsynth supports the following MIDI drivers: %s", allnames);
         }
         else
         {
-            FLUID_LOG(FLUID_INFO, "No MIDI drivers available.");
+            FLUID_LOG(FLUID_INFO, "This build of fluidsynth doesn't support any MIDI drivers.");
         }
 
         FLUID_FREE(allnames);

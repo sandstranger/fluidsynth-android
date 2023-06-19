@@ -30,6 +30,7 @@
 
 #include "fluid_event.h"
 #include "fluidsynth_priv.h"
+#include "fluid_midi.h"
 
 /***************************************************************
  *
@@ -47,6 +48,7 @@ fluid_event_clear(fluid_event_t *evt)
     evt->dest = -1;
     evt->src = -1;
     evt->type = -1;
+    evt->id = -1;
 }
 
 /**
@@ -95,6 +97,12 @@ fluid_event_set_time(fluid_event_t *evt, unsigned int time)
     evt->time = time;
 }
 
+void
+fluid_event_set_id(fluid_event_t *evt, fluid_note_id_t id)
+{
+    evt->id = id;
+}
+
 /**
  * Set source of a sequencer event. \c src must be a unique sequencer ID or -1 if not set.
  * @param evt Sequencer event structure
@@ -135,10 +143,18 @@ fluid_event_timer(fluid_event_t *evt, void *data)
  * @param channel MIDI channel number
  * @param key MIDI note number (0-127)
  * @param vel MIDI velocity value (0-127)
+ * @note Since fluidsynth 2.2.2, this function will give you a #FLUID_SEQ_NOTEOFF when
+ * called with @p vel being zero.
  */
 void
 fluid_event_noteon(fluid_event_t *evt, int channel, short key, short vel)
 {
+    if(vel == 0)
+    {
+        fluid_event_noteoff(evt, channel, key);
+        return;
+    }
+
     evt->type = FLUID_SEQ_NOTEON;
     evt->channel = channel;
     evt->key = key;
@@ -161,11 +177,19 @@ fluid_event_noteoff(fluid_event_t *evt, int channel, short key)
 
 /**
  * Set a sequencer event to be a note duration event.
+ *
+ * Before fluidsynth 2.2.0, this event type was naively implemented when used in conjunction with fluid_sequencer_register_fluidsynth(),
+ * because it simply enqueued a fluid_event_noteon() and fluid_event_noteoff().
+ * A handling for overlapping notes was not implemented. Starting with 2.2.0, this changes: If a fluid_event_note() is already playing,
+ * while another fluid_event_note() arrives on the same @c channel and @c key, the earlier event will be canceled.
  * @param evt Sequencer event structure
  * @param channel MIDI channel number
  * @param key MIDI note number (0-127)
- * @param vel MIDI velocity value (0-127)
- * @param duration Duration of note in the time scale used by the sequencer (by default milliseconds)
+ * @param vel MIDI velocity value (1-127)
+ * @param duration Duration of note in the time scale used by the sequencer
+ *
+ * @note The application should decide whether to use only Notes with duration, or separate NoteOn and NoteOff events.
+ * @warning Calling this function with @p vel or @p duration being zero results in undefined behavior!
  */
 void
 fluid_event_note(fluid_event_t *evt, int channel, short key, short vel, unsigned int duration)
@@ -222,7 +246,7 @@ fluid_event_bank_select(fluid_event_t *evt, int channel, short bank_num)
  * @param val MIDI program number (0-127)
  */
 void
-fluid_event_program_change(fluid_event_t *evt, int channel, short val)
+fluid_event_program_change(fluid_event_t *evt, int channel, int val)
 {
     evt->type = FLUID_SEQ_PROGRAMCHANGE;
     evt->channel = channel;
@@ -246,19 +270,6 @@ fluid_event_program_select(fluid_event_t *evt, int channel,
     evt->duration = sfont_id;
     evt->value = preset_num;
     evt->control = bank_num;
-}
-
-/**
- * Set a sequencer event to be an any control change event (for internal use).
- * @param evt Sequencer event structure
- * @param channel MIDI channel number
- * @deprecated This function has been deprecated. It was only meant for internal usage, it should have never been made public. It will be removed in fluidsynth 2.2.0.
- */
-void
-fluid_event_any_control_change(fluid_event_t *evt, int channel)
-{
-    evt->type = FLUID_SEQ_ANYCONTROLCHANGE;
-    evt->channel = channel;
 }
 
 /**
@@ -293,7 +304,7 @@ fluid_event_pitch_bend(fluid_event_t *evt, int channel, int pitch)
  * @param value MIDI pitch wheel sensitivity value in semitones
  */
 void
-fluid_event_pitch_wheelsens(fluid_event_t *evt, int channel, short value)
+fluid_event_pitch_wheelsens(fluid_event_t *evt, int channel, int value)
 {
     evt->type = FLUID_SEQ_PITCHWHEELSENS;
     evt->channel = channel;
@@ -307,7 +318,7 @@ fluid_event_pitch_wheelsens(fluid_event_t *evt, int channel, short value)
  * @param val MIDI modulation value (0-127)
  */
 void
-fluid_event_modulation(fluid_event_t *evt, int channel, short val)
+fluid_event_modulation(fluid_event_t *evt, int channel, int val)
 {
     evt->type = FLUID_SEQ_MODULATION;
     evt->channel = channel;
@@ -332,7 +343,7 @@ fluid_event_modulation(fluid_event_t *evt, int channel, short val)
  * @param val MIDI sustain value (0-127)
  */
 void
-fluid_event_sustain(fluid_event_t *evt, int channel, short val)
+fluid_event_sustain(fluid_event_t *evt, int channel, int val)
 {
     evt->type = FLUID_SEQ_SUSTAIN;
     evt->channel = channel;
@@ -358,7 +369,7 @@ fluid_event_sustain(fluid_event_t *evt, int channel, short val)
  * @param val MIDI control value (0-127)
  */
 void
-fluid_event_control_change(fluid_event_t *evt, int channel, short control, short val)
+fluid_event_control_change(fluid_event_t *evt, int channel, short control, int val)
 {
     evt->type = FLUID_SEQ_CONTROLCHANGE;
     evt->channel = channel;
@@ -373,7 +384,7 @@ fluid_event_control_change(fluid_event_t *evt, int channel, short control, short
  * @param val MIDI panning value (0-127, 0=left, 64 = middle, 127 = right)
  */
 void
-fluid_event_pan(fluid_event_t *evt, int channel, short val)
+fluid_event_pan(fluid_event_t *evt, int channel, int val)
 {
     evt->type = FLUID_SEQ_PAN;
     evt->channel = channel;
@@ -398,7 +409,7 @@ fluid_event_pan(fluid_event_t *evt, int channel, short val)
  * @param val Volume value (0-127)
  */
 void
-fluid_event_volume(fluid_event_t *evt, int channel, short val)
+fluid_event_volume(fluid_event_t *evt, int channel, int val)
 {
     evt->type = FLUID_SEQ_VOLUME;
     evt->channel = channel;
@@ -423,7 +434,7 @@ fluid_event_volume(fluid_event_t *evt, int channel, short val)
  * @param val Reverb amount (0-127)
  */
 void
-fluid_event_reverb_send(fluid_event_t *evt, int channel, short val)
+fluid_event_reverb_send(fluid_event_t *evt, int channel, int val)
 {
     evt->type = FLUID_SEQ_REVERBSEND;
     evt->channel = channel;
@@ -448,7 +459,7 @@ fluid_event_reverb_send(fluid_event_t *evt, int channel, short val)
  * @param val Chorus amount (0-127)
  */
 void
-fluid_event_chorus_send(fluid_event_t *evt, int channel, short val)
+fluid_event_chorus_send(fluid_event_t *evt, int channel, int val)
 {
     evt->type = FLUID_SEQ_CHORUSSEND;
     evt->channel = channel;
@@ -479,6 +490,20 @@ fluid_event_unregistering(fluid_event_t *evt)
 }
 
 /**
+ * Set a sequencer event to be a scale change event.
+ * Useful for scheduling tempo changes.
+ * @param evt Sequencer event structure
+ * @param new_scale The new time scale to apply to the sequencer, see fluid_sequencer_set_time_scale()
+ * @since 2.2.0
+ */
+void
+fluid_event_scale(fluid_event_t *evt, double new_scale)
+{
+    evt->type = FLUID_SEQ_SCALE;
+    evt->scale = new_scale;
+}
+
+/**
  * Set a sequencer event to be a channel-wide aftertouch event.
  * @param evt Sequencer event structure
  * @param channel MIDI channel number
@@ -486,7 +511,7 @@ fluid_event_unregistering(fluid_event_t *evt)
  * @since 1.1.0
  */
 void
-fluid_event_channel_pressure(fluid_event_t *evt, int channel, short val)
+fluid_event_channel_pressure(fluid_event_t *evt, int channel, int val)
 {
     evt->type = FLUID_SEQ_CHANNELPRESSURE;
     evt->channel = channel;
@@ -513,7 +538,7 @@ fluid_event_channel_pressure(fluid_event_t *evt, int channel, short val)
  * @since 2.0.0
  */
 void
-fluid_event_key_pressure(fluid_event_t *evt, int channel, short key, short val)
+fluid_event_key_pressure(fluid_event_t *evt, int channel, short key, int val)
 {
     evt->type = FLUID_SEQ_KEYPRESSURE;
     evt->channel = channel;
@@ -553,7 +578,88 @@ fluid_event_system_reset(fluid_event_t *evt)
     evt->type = FLUID_SEQ_SYSTEMRESET;
 }
 
+/**
+ * Transforms an incoming MIDI event (from a MIDI driver or MIDI router) to a
+ * sequencer event.
+ *
+ * @param evt Sequencer event structure
+ * @param event MIDI event
+ * @return #FLUID_OK or #FLUID_FAILED
+ *
+ * @note This function copies the fields of the MIDI event into the provided
+ * sequencer event. Calling applications must create the sequencer event and set
+ * additional fields such as the source and destination of the sequencer event.
+ *
+ * @code{.cpp}
+ * // ... get MIDI event, e.g. using player_callback()
+ *
+ * // Send MIDI event to sequencer to play
+ * fluid_event_t *evt = new_fluid_event();
+ * fluid_event_set_source(evt, -1);
+ * fluid_event_set_dest(evt, seqid);
+ * fluid_event_from_midi_event(evt, event);
+ * fluid_sequencer_send_at(sequencer, evt, 50, 0); // relative time
+ * delete_fluid_event(evt);
+ * @endcode
+ *
+ * @since 2.2.7
+ */
+int fluid_event_from_midi_event(fluid_event_t *evt, const fluid_midi_event_t *event)
+{
+    int chan;
+    fluid_return_val_if_fail(event != NULL, FLUID_FAILED);
 
+    chan = fluid_midi_event_get_channel(event);
+
+    switch (fluid_midi_event_get_type(event))
+    {
+        case NOTE_OFF:
+            fluid_event_noteoff(evt, chan, (short)fluid_midi_event_get_key(event));
+            break;
+
+        case NOTE_ON:
+            fluid_event_noteon(evt,
+                               fluid_midi_event_get_channel(event),
+                               (short)fluid_midi_event_get_key(event),
+                               (short)fluid_midi_event_get_velocity(event));
+            break;
+
+        case CONTROL_CHANGE:
+            fluid_event_control_change(evt,
+                                       chan,
+                                       (short)fluid_midi_event_get_control(event),
+                                       (short)fluid_midi_event_get_value(event));
+            break;
+
+        case PROGRAM_CHANGE:
+            fluid_event_program_change(evt, chan, (short)fluid_midi_event_get_program(event));
+            break;
+
+        case PITCH_BEND:
+            fluid_event_pitch_bend(evt, chan, fluid_midi_event_get_pitch(event));
+            break;
+
+        case CHANNEL_PRESSURE:
+            fluid_event_channel_pressure(evt, chan, (short)fluid_midi_event_get_program(event));
+            break;
+
+        case KEY_PRESSURE:
+            fluid_event_key_pressure(evt,
+                                     chan,
+                                     (short)fluid_midi_event_get_key(event),
+                                     (short)fluid_midi_event_get_value(event));
+            break;
+
+        case MIDI_SYSTEM_RESET:
+            fluid_event_system_reset(evt);
+            break;
+
+        default: /* Not yet implemented */
+            return FLUID_FAILED;
+    }
+
+    return FLUID_OK;
+}
 
 /*
  * Accessing event data
@@ -578,6 +684,17 @@ int fluid_event_get_type(fluid_event_t *evt)
 unsigned int fluid_event_get_time(fluid_event_t *evt)
 {
     return evt->time;
+}
+
+/**
+ * @internal
+ * Get the time field from a sequencer event structure.
+ * @param evt Sequencer event structure
+ * @return Time value
+ */
+fluid_note_id_t fluid_event_get_id(fluid_event_t *evt)
+{
+    return evt->id;
 }
 
 /**
@@ -652,7 +769,7 @@ short fluid_event_get_control(fluid_event_t *evt)
  * #FLUID_SEQ_CONTROLCHANGE, #FLUID_SEQ_PAN, #FLUID_SEQ_VOLUME,
  * #FLUID_SEQ_REVERBSEND, #FLUID_SEQ_CHORUSSEND.
  */
-short fluid_event_get_value(fluid_event_t *evt)
+int fluid_event_get_value(fluid_event_t *evt)
 {
     return evt->value;
 }
@@ -714,7 +831,7 @@ int fluid_event_get_pitch(fluid_event_t *evt)
  * Used by the #FLUID_SEQ_PROGRAMCHANGE and #FLUID_SEQ_PROGRAMSELECT
  * event types.
  */
-short
+int
 fluid_event_get_program(fluid_event_t *evt)
 {
     return evt->value;
@@ -733,182 +850,14 @@ fluid_event_get_sfont_id(fluid_event_t *evt)
     return evt->duration;
 }
 
-
-
-/********************/
-/* heap management  */
-/********************/
-
-fluid_evt_heap_t *
-_fluid_evt_heap_init(int nbEvents)
+/**
+ * Gets time scale field from a sequencer event structure.
+ * @param evt Sequencer event structure
+ * @return SoundFont identifier value.
+ *
+ * Used by the #FLUID_SEQ_SCALE event type.
+ */
+double fluid_event_get_scale(fluid_event_t *evt)
 {
-#ifdef HEAP_WITH_DYNALLOC
-
-    int i;
-    fluid_evt_heap_t *heap;
-    fluid_evt_entry *tmp;
-
-    heap = FLUID_NEW(fluid_evt_heap_t);
-
-    if(heap == NULL)
-    {
-        FLUID_LOG(FLUID_PANIC, "sequencer: Out of memory\n");
-        return NULL;
-    }
-
-    heap->freelist = NULL;
-    fluid_mutex_init(heap->mutex);
-
-    /* LOCK */
-    fluid_mutex_lock(heap->mutex);
-
-    /* Allocate the event entries */
-    for(i = 0; i < nbEvents; i++)
-    {
-        tmp = FLUID_NEW(fluid_evt_entry);
-        tmp->next = heap->freelist;
-        heap->freelist = tmp;
-    }
-
-    /* UNLOCK */
-    fluid_mutex_unlock(heap->mutex);
-
-
-#else
-    int i;
-    fluid_evt_heap_t *heap;
-    int siz = 2 * sizeof(fluid_evt_entry *) + sizeof(fluid_evt_entry) * nbEvents;
-
-    heap = (fluid_evt_heap_t *)FLUID_MALLOC(siz);
-
-    if(heap == NULL)
-    {
-        FLUID_LOG(FLUID_PANIC, "sequencer: Out of memory\n");
-        return NULL;
-    }
-
-    FLUID_MEMSET(heap, 0, siz);
-
-    /* link all heap events */
-    {
-        fluid_evt_entry *tmp = &(heap->pool);
-
-        for(i = 0 ; i < nbEvents - 1 ; i++)
-        {
-            tmp[i].next = &(tmp[i + 1]);
-        }
-
-        tmp[nbEvents - 1].next = NULL;
-
-        /* set head & tail */
-        heap->tail = &(tmp[nbEvents - 1]);
-        heap->head = &(heap->pool);
-    }
-#endif
-    return (heap);
-}
-
-void
-_fluid_evt_heap_free(fluid_evt_heap_t *heap)
-{
-#ifdef HEAP_WITH_DYNALLOC
-    fluid_evt_entry *tmp, *next;
-
-    /* LOCK */
-    fluid_mutex_lock(heap->mutex);
-
-    tmp = heap->freelist;
-
-    while(tmp)
-    {
-        next = tmp->next;
-        FLUID_FREE(tmp);
-        tmp = next;
-    }
-
-    /* UNLOCK */
-    fluid_mutex_unlock(heap->mutex);
-    fluid_mutex_destroy(heap->mutex);
-
-    FLUID_FREE(heap);
-
-#else
-    FLUID_FREE(heap);
-#endif
-}
-
-fluid_evt_entry *
-_fluid_seq_heap_get_free(fluid_evt_heap_t *heap)
-{
-#ifdef HEAP_WITH_DYNALLOC
-    fluid_evt_entry *evt = NULL;
-
-    /* LOCK */
-    fluid_mutex_lock(heap->mutex);
-
-#if !defined(MACOS9)
-
-    if(heap->freelist == NULL)
-    {
-        heap->freelist = FLUID_NEW(fluid_evt_entry);
-
-        if(heap->freelist != NULL)
-        {
-            heap->freelist->next = NULL;
-        }
-    }
-
-#endif
-
-    evt = heap->freelist;
-
-    if(evt != NULL)
-    {
-        heap->freelist = heap->freelist->next;
-        evt->next = NULL;
-    }
-
-    /* UNLOCK */
-    fluid_mutex_unlock(heap->mutex);
-
-    return evt;
-
-#else
-    fluid_evt_entry *evt;
-
-    if(heap->head == NULL)
-    {
-        return NULL;
-    }
-
-    /* take from head of the heap */
-    /* critical - should threadlock ? */
-    evt = heap->head;
-    heap->head = heap->head->next;
-
-    return evt;
-#endif
-}
-
-void
-_fluid_seq_heap_set_free(fluid_evt_heap_t *heap, fluid_evt_entry *evt)
-{
-#ifdef HEAP_WITH_DYNALLOC
-
-    /* LOCK */
-    fluid_mutex_lock(heap->mutex);
-
-    evt->next = heap->freelist;
-    heap->freelist = evt;
-
-    /* UNLOCK */
-    fluid_mutex_unlock(heap->mutex);
-
-#else
-    /* append to the end of the heap */
-    /* critical - should threadlock ? */
-    heap->tail->next = evt;
-    heap->tail = evt;
-    evt->next = NULL;
-#endif
+    return evt->scale;
 }

@@ -115,7 +115,7 @@ fluid_channel_init(fluid_channel_t *chan)
 
 /*
   @param is_all_ctrl_off if nonzero, only resets some controllers, according to
-  http://www.midi.org/techspecs/rp15.php
+  https://www.midi.org/techspecs/rp15.php
 */
 void
 fluid_channel_init_ctrl(fluid_channel_t *chan, int is_all_ctrl_off)
@@ -162,9 +162,10 @@ fluid_channel_init_ctrl(fluid_channel_t *chan, int is_all_ctrl_off)
             fluid_channel_set_cc(chan, i, 0);
         }
 
-        fluid_channel_clear_portamento(chan); /* Clear PTC receive */
         chan->previous_cc_breath = 0;/* Reset previous breath */
     }
+    /* Unconditionally clear PTC receive (issue #1050) */
+    fluid_channel_clear_portamento(chan);
 
     /* Reset polyphonic key pressure on all voices */
     for(i = 0; i < 128; i++)
@@ -211,7 +212,7 @@ fluid_channel_init_ctrl(fluid_channel_t *chan, int is_all_ctrl_off)
         /* fluid_channel_set_cc (chan, EFFECTS_DEPTH1, 40); */
         /* Note: although XG standard specifies the default amount of reverb to
            be 40, most people preferred having it at zero.
-           See http://lists.gnu.org/archive/html/fluid-dev/2009-07/msg00016.html */
+           See https://lists.gnu.org/archive/html/fluid-dev/2009-07/msg00016.html */
     }
 }
 
@@ -224,7 +225,6 @@ delete_fluid_channel(fluid_channel_t *chan)
     FLUID_FREE(chan);
 }
 
-/* FIXME - Calls fluid_channel_init() potentially in synthesis context */
 void
 fluid_channel_reset(fluid_channel_t *chan)
 {
@@ -324,7 +324,7 @@ fluid_channel_set_bank_msb(fluid_channel_t *chan, int bankmsb)
     {
         /* XG bank, do drum-channel auto-switch */
         /* The number "120" was based on several keyboards having drums at 120 - 127,
-           reference: http://lists.nongnu.org/archive/html/fluid-dev/2011-02/msg00003.html */
+           reference: https://lists.nongnu.org/archive/html/fluid-dev/2011-02/msg00003.html */
         chan->channel_type = (120 <= bankmsb) ? CHANNEL_TYPE_DRUM : CHANNEL_TYPE_MELODIC;
         return;
     }
@@ -372,6 +372,27 @@ fluid_channel_get_sfont_bank_prog(fluid_channel_t *chan, int *sfont,
     if(prog)
     {
         *prog = (sfont_bank_prog & PROG_MASKVAL) >> PROG_SHIFTVAL;
+    }
+}
+
+/**
+ * Compute the pitch for a key after applying Fluidsynth's tuning functionality
+ * and channel coarse/fine tunings.
+ * @param chan fluid_channel_t
+ * @param key MIDI note number (0-127)
+ * @return the pitch of the key
+ */
+fluid_real_t fluid_channel_get_key_pitch(fluid_channel_t *chan, int key)
+{
+    if(chan->tuning)
+    {
+        return fluid_tuning_get_pitch(chan->tuning, key)
+            + 100.0f * fluid_channel_get_gen(chan, GEN_COARSETUNE)
+            + fluid_channel_get_gen(chan, GEN_FINETUNE);
+    }
+    else
+    {
+        return key * 100.0f;
     }
 }
 

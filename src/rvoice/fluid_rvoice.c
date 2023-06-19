@@ -331,7 +331,7 @@ fluid_rvoice_write(fluid_rvoice_t *voice, fluid_real_t *dsp_buf)
 
     /******************* vol env **********************/
 
-    fluid_adsr_env_calc(&voice->envlfo.volenv, 1);
+    fluid_adsr_env_calc(&voice->envlfo.volenv);
     fluid_check_fpe("voice_write vol env");
 
     if(fluid_adsr_env_get_section(&voice->envlfo.volenv) == FLUID_VOICE_ENVFINISHED)
@@ -341,7 +341,7 @@ fluid_rvoice_write(fluid_rvoice_t *voice, fluid_real_t *dsp_buf)
 
     /******************* mod env **********************/
 
-    fluid_adsr_env_calc(&voice->envlfo.modenv, 0);
+    fluid_adsr_env_calc(&voice->envlfo.modenv);
     fluid_check_fpe("voice_write mod env");
 
     /******************* lfo **********************/
@@ -493,7 +493,8 @@ fluid_rvoice_buffers_check_bufnum(fluid_rvoice_buffers_t *buffers, unsigned int 
 
     for(i = buffers->count; i <= bufnum; i++)
     {
-        buffers->bufs[i].amp = 0.0f;
+        buffers->bufs[i].target_amp = 0.0f;
+        buffers->bufs[i].current_amp = 0.0f;
     }
 
     buffers->count = bufnum + 1;
@@ -512,7 +513,7 @@ DECLARE_FLUID_RVOICE_FUNCTION(fluid_rvoice_buffers_set_amp)
         return;
     }
 
-    buffers->bufs[bufnum].amp = value;
+    buffers->bufs[bufnum].target_amp = value;
 }
 
 DECLARE_FLUID_RVOICE_FUNCTION(fluid_rvoice_buffers_set_mapping)

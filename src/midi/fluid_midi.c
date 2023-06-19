@@ -26,7 +26,7 @@
 
 static int fluid_midi_event_length(unsigned char event);
 static int fluid_isasciistring(char *s);
-static long fluid_getlength(unsigned char *s);
+static long fluid_getlength(const unsigned char *s);
 
 
 /* Read the entire contents of a file into memory, allocating enough memory
@@ -54,6 +54,7 @@ static int fluid_player_reset(fluid_player_t *player);
 static int fluid_player_load(fluid_player_t *player, fluid_playlist_item *item);
 static void fluid_player_advancefile(fluid_player_t *player);
 static void fluid_player_playlist_load(fluid_player_t *player, unsigned int msec);
+static void fluid_player_update_tempo(fluid_player_t *player);
 
 static fluid_midi_file *new_fluid_midi_file(const char *buffer, size_t length);
 static void delete_fluid_midi_file(fluid_midi_file *mf);
@@ -125,8 +126,13 @@ new_fluid_midi_file(const char *buffer, size_t length)
 {
     fluid_midi_file *mf;
 
-    mf = FLUID_NEW(fluid_midi_file);
+    if(length > INT_MAX)
+    {
+        FLUID_LOG(FLUID_ERR, "Refusing to open a MIDI file which is bigger than 2GiB");
+        return NULL;
+    }
 
+    mf = FLUID_NEW(fluid_midi_file);
     if(mf == NULL)
     {
         FLUID_LOG(FLUID_ERR, "Out of memory");
@@ -139,7 +145,7 @@ new_fluid_midi_file(const char *buffer, size_t length)
     mf->running_status = -1;
 
     mf->buffer = buffer;
-    mf->buf_len = length;
+    mf->buf_len = (int)length;
     mf->buf_pos = 0;
     mf->eof = FALSE;
 
@@ -419,7 +425,7 @@ fluid_isasciistring(char *s)
  * fluid_getlength
  */
 long
-fluid_getlength(unsigned char *s)
+fluid_getlength(const unsigned char *s)
 {
     long i = 0;
     i = s[3] | (s[2] << 8) | (s[1] << 16) | (s[0] << 24);
@@ -487,7 +493,7 @@ fluid_midi_file_read_track(fluid_midi_file *mf, fluid_player_t *player, int num)
         if(fluid_isasciistring((char *) id) == 0)
         {
             FLUID_LOG(FLUID_ERR,
-                      "An non-ascii track header found, corrupt file");
+                      "A non-ascii track header found, corrupt file");
             return FLUID_FAILED;
 
         }
@@ -1105,7 +1111,7 @@ delete_fluid_midi_event(fluid_midi_event_t *evt)
  * @return Event type field (MIDI status byte without channel)
  */
 int
-fluid_midi_event_get_type(fluid_midi_event_t *evt)
+fluid_midi_event_get_type(const fluid_midi_event_t *evt)
 {
     return evt->type;
 }
@@ -1129,7 +1135,7 @@ fluid_midi_event_set_type(fluid_midi_event_t *evt, int type)
  * @return Channel field
  */
 int
-fluid_midi_event_get_channel(fluid_midi_event_t *evt)
+fluid_midi_event_get_channel(const fluid_midi_event_t *evt)
 {
     return evt->channel;
 }
@@ -1153,7 +1159,7 @@ fluid_midi_event_set_channel(fluid_midi_event_t *evt, int chan)
  * @return MIDI note number (0-127)
  */
 int
-fluid_midi_event_get_key(fluid_midi_event_t *evt)
+fluid_midi_event_get_key(const fluid_midi_event_t *evt)
 {
     return evt->param1;
 }
@@ -1177,7 +1183,7 @@ fluid_midi_event_set_key(fluid_midi_event_t *evt, int v)
  * @return MIDI velocity number (0-127)
  */
 int
-fluid_midi_event_get_velocity(fluid_midi_event_t *evt)
+fluid_midi_event_get_velocity(const fluid_midi_event_t *evt)
 {
     return evt->param2;
 }
@@ -1201,7 +1207,7 @@ fluid_midi_event_set_velocity(fluid_midi_event_t *evt, int v)
  * @return MIDI control number
  */
 int
-fluid_midi_event_get_control(fluid_midi_event_t *evt)
+fluid_midi_event_get_control(const fluid_midi_event_t *evt)
 {
     return evt->param1;
 }
@@ -1225,7 +1231,7 @@ fluid_midi_event_set_control(fluid_midi_event_t *evt, int v)
  * @return Value field
  */
 int
-fluid_midi_event_get_value(fluid_midi_event_t *evt)
+fluid_midi_event_get_value(const fluid_midi_event_t *evt)
 {
     return evt->param2;
 }
@@ -1249,7 +1255,7 @@ fluid_midi_event_set_value(fluid_midi_event_t *evt, int v)
  * @return MIDI program number (0-127)
  */
 int
-fluid_midi_event_get_program(fluid_midi_event_t *evt)
+fluid_midi_event_get_program(const fluid_midi_event_t *evt)
 {
     return evt->param1;
 }
@@ -1273,7 +1279,7 @@ fluid_midi_event_set_program(fluid_midi_event_t *evt, int val)
  * @return Pitch value (14 bit value, 0-16383, 8192 is center)
  */
 int
-fluid_midi_event_get_pitch(fluid_midi_event_t *evt)
+fluid_midi_event_get_pitch(const fluid_midi_event_t *evt)
 {
     return evt->param1;
 }
@@ -1576,12 +1582,12 @@ fluid_track_send_events(fluid_track_t *track,
             return;
         }
 
-        /* 		printf("track=%02d\tticks=%05u\ttrack=%05u\tdtime=%05u\tnext=%05u\n", */
-        /* 		       track->num, */
-        /* 		       ticks, */
-        /* 		       track->ticks, */
-        /* 		       event->dtime, */
-        /* 		       track->ticks + event->dtime); */
+        /*         printf("track=%02d\tticks=%05u\ttrack=%05u\tdtime=%05u\tnext=%05u\n", */
+        /*                track->num, */
+        /*                ticks, */
+        /*                track->ticks, */
+        /*                event->dtime, */
+        /*                track->ticks + event->dtime); */
 
         if(track->ticks + event->dtime > ticks)
         {
@@ -1592,6 +1598,7 @@ fluid_track_send_events(fluid_track_t *track,
 
         if(!player || event->type == MIDI_EOT)
         {
+            /* don't send EOT events to the callback */
         }
         else if(seeking && track->ticks != ticks && (event->type == NOTE_ON || event->type == NOTE_OFF))
         {
@@ -1602,12 +1609,18 @@ fluid_track_send_events(fluid_track_t *track,
             if(player->playback_callback)
             {
                 player->playback_callback(player->playback_userdata, event);
+                if(event->type == NOTE_ON && event->param2 != 0 && !player->channel_isplaying[event->channel])
+                {
+                    player->channel_isplaying[event->channel] = TRUE;
+                }
             }
         }
 
-        if(event->type == MIDI_SET_TEMPO)
+        if(event->type == MIDI_SET_TEMPO && player != NULL)
         {
-            fluid_player_set_midi_tempo(player, event->param1);
+            /* memorize the tempo change value coming from the MIDI file */
+            fluid_atomic_int_set(&player->miditempo, event->param1);
+            fluid_player_update_tempo(player);
         }
 
         fluid_track_next_event(track);
@@ -1647,6 +1660,7 @@ new_fluid_player(fluid_synth_t *synth)
     }
 
     fluid_atomic_int_set(&player->status, FLUID_PLAYER_READY);
+    fluid_atomic_int_set(&player->stopping, 0);
     player->loop = 1;
     player->ntracks = 0;
 
@@ -1661,13 +1675,24 @@ new_fluid_player(fluid_synth_t *synth)
     player->playlist = NULL;
     player->currentfile = NULL;
     player->division = 0;
-    player->send_program_change = 1;
+
+    /* internal tempo (from MIDI file) in micro seconds per quarter note */
+    player->sync_mode = 1; /* the player follows internal tempo change */
     player->miditempo = 500000;
+    /* external tempo in micro seconds per quarter note */
+    player->exttempo = 500000;
+    /* tempo multiplier */
+    player->multempo = 1.0F;
+
     player->deltatime = 4.0;
     player->cur_msec = 0;
     player->cur_ticks = 0;
+    player->end_msec = -1;
+    player->end_pedals_disabled = 0;
+    player->last_callback_ticks = -1;
     fluid_atomic_int_set(&player->seek_ticks, -1);
     fluid_player_set_playback_callback(player, fluid_synth_handle_midi_event, synth);
+    fluid_player_set_tick_callback(player, NULL, NULL);
     player->use_system_timer = fluid_settings_str_equal(synth->settings,
                                "player.timing-source", "system");
     if(player->use_system_timer)
@@ -1707,7 +1732,9 @@ err:
 /**
  * Delete a MIDI player instance.
  * @param player MIDI player instance
- * @warning Do not call while the \p synth renders audio, i.e. an audio driver is running or any other synthesizer thread calls fluid_synth_process() or fluid_synth_nwrite_float() or fluid_synth_write_*() !
+ * @warning Do not call when the synthesizer associated to this \p player renders audio,
+ * i.e. an audio driver is running or any other synthesizer thread concurrently calls
+ * fluid_synth_process() or fluid_synth_nwrite_float() or fluid_synth_write_*() !
  */
 void
 delete_fluid_player(fluid_player_t *player)
@@ -1771,12 +1798,16 @@ fluid_player_reset(fluid_player_t *player)
         }
     }
 
-    /*	player->current_file = NULL; */
-    /*	player->status = FLUID_PLAYER_READY; */
-    /*	player->loop = 1; */
+    for(i = 0; i < MAX_NUMBER_OF_CHANNELS; i++)
+    {
+        player->channel_isplaying[i] = FALSE;
+    }
+
+    /*    player->current_file = NULL; */
+    /*    player->status = FLUID_PLAYER_READY; */
+    /*    player->loop = 1; */
     player->ntracks = 0;
     player->division = 0;
-    player->send_program_change = 1;
     player->miditempo = 500000;
     player->deltatime = 4.0;
     return 0;
@@ -1800,16 +1831,18 @@ fluid_player_add_track(fluid_player_t *player, fluid_track_t *track)
 }
 
 /**
- * Change the MIDI callback function. This is usually set to
- * fluid_synth_handle_midi_event(), but can optionally be changed
- * to a user-defined function instead, for intercepting all MIDI
- * messages sent to the synth. You can also use a midi router as
- * the callback function to modify the MIDI messages before sending
- * them to the synth.
+ * Change the MIDI callback function.
+ *
  * @param player MIDI player instance
  * @param handler Pointer to callback function
  * @param handler_data Parameter sent to the callback function
  * @returns FLUID_OK
+ *
+ * This is usually set to fluid_synth_handle_midi_event(), but can optionally
+ * be changed to a user-defined function instead, for intercepting all MIDI
+ * messages sent to the synth. You can also use a midi router as the callback
+ * function to modify the MIDI messages before sending them to the synth.
+ *
  * @since 1.1.4
  */
 int
@@ -1818,6 +1851,28 @@ fluid_player_set_playback_callback(fluid_player_t *player,
 {
     player->playback_callback = handler;
     player->playback_userdata = handler_data;
+    return FLUID_OK;
+}
+
+/**
+ * Add a listener function for every MIDI tick change.
+ *
+ * @param player MIDI player instance
+ * @param handler Pointer to callback function
+ * @param handler_data Opaque parameter to be sent to the callback function
+ * @returns #FLUID_OK
+ *
+ * This callback is not set by default, but can optionally
+ * be changed to a user-defined function for intercepting all MIDI
+ * tick changes and react to them with precision.
+ *
+ * @since 2.2.0
+ */
+int
+fluid_player_set_tick_callback(fluid_player_t *player, handle_midi_tick_func_t handler, void *handler_data)
+{
+    player->tick_callback = handler;
+    player->tick_userdata = handler_data;
     return FLUID_OK;
 }
 
@@ -1941,7 +1996,7 @@ fluid_player_load(fluid_player_t *player, fluid_playlist_item *item)
     }
 
     player->division = fluid_midi_file_get_division(midifile);
-    fluid_player_set_midi_tempo(player, player->miditempo); // Update deltatime
+    fluid_player_update_tempo(player);  // Update deltatime
     /*FLUID_LOG(FLUID_DBG, "quarter note division=%d\n", player->division); */
 
     if(fluid_midi_file_load_tracks(midifile, player) != FLUID_OK)
@@ -2023,11 +2078,6 @@ fluid_player_playlist_load(fluid_player_t *player, unsigned int msec)
     player->start_ticks = 0;
     player->cur_ticks = 0;
 
-    if(player->reset_synth_between_songs)
-    {
-        fluid_synth_system_reset(player->synth);
-    }
-
     for(i = 0; i < player->ntracks; i++)
     {
         if(player->track[i] != NULL)
@@ -2046,20 +2096,38 @@ fluid_player_callback(void *data, unsigned int msec)
     int i;
     int loadnextfile;
     int status = FLUID_PLAYER_DONE;
+    fluid_midi_event_t mute_event;
     fluid_player_t *player;
     fluid_synth_t *synth;
     player = (fluid_player_t *) data;
     synth = player->synth;
 
     loadnextfile = player->currentfile == NULL ? 1 : 0;
+    
+    fluid_midi_event_set_type(&mute_event, CONTROL_CHANGE);
+    mute_event.param1 = ALL_SOUND_OFF;
+    mute_event.param2 = 1;
 
-    if(fluid_player_get_status(player) == FLUID_PLAYER_DONE)
+    if(fluid_player_get_status(player) != FLUID_PLAYER_PLAYING)
     {
-        fluid_synth_all_notes_off(synth, -1);
+        if(fluid_atomic_int_get(&player->stopping))
+        {
+            for(i = 0; i < synth->midi_channels; i++)
+            {
+                if(player->channel_isplaying[i])
+                {
+                    fluid_midi_event_set_channel(&mute_event, i);
+                    player->playback_callback(player->playback_userdata, &mute_event);
+                    player->channel_isplaying[i] = FALSE;
+                }
+            }
+            fluid_atomic_int_set(&player->stopping, 0);
+        }
         return 1;
     }
     do
     {
+        float deltatime;
         int seek_ticks;
 
         if(loadnextfile)
@@ -2073,23 +2141,42 @@ fluid_player_callback(void *data, unsigned int msec)
             }
         }
 
+        if(msec < player->cur_msec)
+        {
+            // overflow of fluid_synth_get_ticks()
+            FLUID_LOG(FLUID_ERR, "The maximum playback duration has been reached. Terminating player!");
+            fluid_player_stop(player);
+            fluid_player_seek(player, 0);
+            player->cur_ticks = 0;
+            return 0;
+        }
+
         player->cur_msec = msec;
+        deltatime = fluid_atomic_float_get(&player->deltatime);
         player->cur_ticks = (player->start_ticks
                              + (int)((double)(player->cur_msec - player->start_msec)
-                                     / player->deltatime + 0.5)); /* 0.5 to average overall error when casting */
+                                     / deltatime + 0.5)); /* 0.5 to average overall error when casting */
 
         seek_ticks = fluid_atomic_int_get(&player->seek_ticks);
         if(seek_ticks >= 0)
         {
-            fluid_synth_all_sounds_off(synth, -1); /* avoid hanging notes */
+            for(i = 0; i < synth->midi_channels; i++)
+            {
+                if(player->channel_isplaying[i])
+                {
+                    fluid_midi_event_set_channel(&mute_event, i);
+                    player->playback_callback(player->playback_userdata, &mute_event);
+                    player->channel_isplaying[i] = FALSE;
+                }
+            }
         }
 
         for(i = 0; i < player->ntracks; i++)
         {
+            fluid_track_send_events(player->track[i], synth, player, player->cur_ticks, seek_ticks);
             if(!fluid_track_eot(player->track[i]))
             {
                 status = FLUID_PLAYER_PLAYING;
-                fluid_track_send_events(player->track[i], synth, player, player->cur_ticks, seek_ticks);
             }
         }
 
@@ -2101,17 +2188,62 @@ fluid_player_callback(void *data, unsigned int msec)
             player->start_msec = msec;      /* should be the (synth)-time of the last tempo change */
             fluid_atomic_int_set(&player->seek_ticks, -1); /* clear seek_ticks */
         }
+        
+        if(fluid_list_next(player->currentfile) == NULL && player->loop == 0)
+        {
+            /* Once we've run out of MIDI events, keep playing until no voices are active */
+            if(status == FLUID_PLAYER_DONE && fluid_synth_get_active_voice_count(player->synth) > 0)
+            {
+                /* The first time we notice we've run out of MIDI events but there are still active voices, disable all hold pedals */
+                if(!player->end_pedals_disabled)
+                {
+                    for(i = 0; i < synth->midi_channels; i++)
+                    {
+                        fluid_synth_cc(player->synth, i, SUSTAIN_SWITCH, 0);
+                        fluid_synth_cc(player->synth, i, SOSTENUTO_SWITCH, 0);
+                    }
 
+                    player->end_pedals_disabled = 1;
+                }
+
+                status = FLUID_PLAYER_PLAYING;
+            }
+
+            /* Once no voices are active, if end_msec hasn't been scheduled, schedule it so we wait for reverb, etc to finish */
+            if(status == FLUID_PLAYER_DONE && player->end_msec < 0)
+            {
+                player->end_msec = msec + FLUID_PLAYER_STOP_GRACE_MS;
+            }
+            /* If end_msec has been scheduled and is in the future, keep playing */
+            if (player->end_msec >= 0 && msec < (unsigned int) player->end_msec)
+            {
+                status = FLUID_PLAYER_PLAYING;
+            }
+        }
+
+        /* Once there's no reason to keep playing, we're actually done */
         if(status == FLUID_PLAYER_DONE)
         {
             FLUID_LOG(FLUID_DBG, "%s: %d: Duration=%.3f sec", __FILE__,
                       __LINE__, (msec - player->begin_msec) / 1000.0);
+
+            if(player->reset_synth_between_songs)
+            {
+                fluid_synth_system_reset(player->synth);
+            }
+
             loadnextfile = 1;
+        }
+
+        if (player->tick_callback != NULL && player->last_callback_ticks != player->cur_ticks) {
+            player->tick_callback(player->tick_userdata, player->cur_ticks);
+            player->last_callback_ticks = player->cur_ticks;
         }
     }
     while(loadnextfile);
 
-    fluid_atomic_int_set(&player->status, status);
+    /* do not update the status if the player has been stopped already */
+    fluid_atomic_int_compare_and_exchange(&player->status, FLUID_PLAYER_PLAYING, status);
 
     return 1;
 }
@@ -2120,6 +2252,9 @@ fluid_player_callback(void *data, unsigned int msec)
  * Activates play mode for a MIDI player if not already playing.
  * @param player MIDI player instance
  * @return #FLUID_OK on success, #FLUID_FAILED otherwise
+ *
+ * If the list of files added to the player has completed its requested number of loops,
+ * the playlist will be restarted from the beginning with a loop count of 1.
  */
 int
 fluid_player_play(fluid_player_t *player)
@@ -2135,21 +2270,33 @@ fluid_player_play(fluid_player_t *player)
         fluid_sample_timer_reset(player->synth, player->sample_timer);
     }
 
+    /* If we're at the end of the playlist and there are no loops left, loop once */
+    if(player->currentfile == NULL && player->loop == 0)
+    {
+      player->loop = 1;
+    }
+
+    player->end_msec = -1;
+    player->end_pedals_disabled = 0;
+
     fluid_atomic_int_set(&player->status, FLUID_PLAYER_PLAYING);
 
     return FLUID_OK;
 }
+
 /**
  * Pauses the MIDI playback.
  *
- * It will not rewind to the beginning of the file, use fluid_player_seek() for this purpose.
  * @param player MIDI player instance
  * @return Always returns #FLUID_OK
+ *
+ * It will not rewind to the beginning of the file, use fluid_player_seek() for this purpose.
  */
 int
 fluid_player_stop(fluid_player_t *player)
 {
     fluid_atomic_int_set(&player->status, FLUID_PLAYER_DONE);
+    fluid_atomic_int_set(&player->stopping, 1);
     fluid_player_seek(player, fluid_player_get_current_tick(player));
     return FLUID_OK;
 }
@@ -2169,20 +2316,22 @@ fluid_player_get_status(fluid_player_t *player)
 /**
  * Seek in the currently playing file.
  *
- * The actual seek will be performed when the synth calls back the player (i.e. a few
- * levels above the player's callback set with fluid_player_set_playback_callback()).
- * If the player's status is #FLUID_PLAYER_PLAYING and a previous seek operation has
- * not been completed yet, #FLUID_FAILED is returned.
  * @param player MIDI player instance
  * @param ticks the position to seek to in the current file
  * @return #FLUID_FAILED if ticks is negative or after the latest tick of the file
  * [or, since 2.1.3, if another seek operation is currently in progress],
  * #FLUID_OK otherwise.
+ *
+ * The actual seek will be performed when the synth calls back the player (i.e. a few
+ * levels above the player's callback set with fluid_player_set_playback_callback()).
+ * If the player's status is #FLUID_PLAYER_PLAYING and a previous seek operation has
+ * not been completed yet, #FLUID_FAILED is returned.
+ *
  * @since 2.0.0
  */
 int fluid_player_seek(fluid_player_t *player, int ticks)
 {
-    if(ticks < 0 || ticks > fluid_player_get_total_ticks(player))
+    if(ticks < 0 || (fluid_player_get_status(player) != FLUID_PLAYER_READY && ticks > fluid_player_get_total_ticks(player)))
     {
         return FLUID_FAILED;
     }
@@ -2212,17 +2361,150 @@ int fluid_player_seek(fluid_player_t *player, int ticks)
 
 /**
  * Enable looping of a MIDI player
+ *
  * @param player MIDI player instance
  * @param loop Times left to loop the playlist. -1 means loop infinitely.
  * @return Always returns #FLUID_OK
- * @since 1.1.0
  *
  * For example, if you want to loop the playlist twice, set loop to 2
  * and call this function before you start the player.
+ *
+ * @since 1.1.0
  */
 int fluid_player_set_loop(fluid_player_t *player, int loop)
 {
     player->loop = loop;
+    return FLUID_OK;
+}
+
+/**
+ * update the MIDI player internal deltatime dependent of actual tempo.
+ * @param player MIDI player instance
+ */
+static void fluid_player_update_tempo(fluid_player_t *player)
+{
+    int tempo; /* tempo in micro seconds by quarter note */
+    float deltatime;
+
+    /* do nothing if the division is still unknown to avoid a div by zero */
+    if(player->division == 0)
+    {
+        return;
+    }
+
+    if(fluid_atomic_int_get(&player->sync_mode))
+    {
+        /* take internal tempo from MIDI file */
+        tempo = fluid_atomic_int_get(&player->miditempo);
+        /* compute deltattime (in ms) from current tempo and apply tempo multiplier */
+        deltatime = (float)tempo / (float)player->division / (float)1000.0;
+        deltatime /= fluid_atomic_float_get(&player->multempo); /* multiply tempo */
+    }
+    else
+    {
+        /* take  external tempo */
+        tempo = fluid_atomic_int_get(&player->exttempo);
+        /* compute deltattime (in ms) from current tempo */
+        deltatime = (float)tempo / (float)player->division / (float)1000.0;
+    }
+
+    fluid_atomic_float_set(&player->deltatime, deltatime);
+
+    player->start_msec = player->cur_msec;
+    player->start_ticks = player->cur_ticks;
+
+    FLUID_LOG(FLUID_DBG,
+              "tempo=%d, tick time=%f msec, cur time=%d msec, cur tick=%d",
+              tempo, player->deltatime, player->cur_msec, player->cur_ticks);
+
+}
+
+/**
+ * Set the tempo of a MIDI player.
+ * The player can be controlled by internal tempo coming from MIDI file tempo
+ * change or controlled by external tempo expressed in BPM or in micro seconds
+ * per quarter note.
+ *
+ * @param player MIDI player instance. Must be a valid pointer.
+ * @param tempo_type Must a be value of #fluid_player_set_tempo_type and indicates the
+ *  meaning of tempo value and how the player will be controlled, see below.
+ * @param tempo Tempo value or multiplier.
+ * 
+ *  #FLUID_PLAYER_TEMPO_INTERNAL, the player will be controlled by internal
+ *  MIDI file tempo changes. If there are no tempo change in the MIDI file a default
+ *  value of 120 bpm is used. The @c tempo parameter is used as a multiplier factor
+ *  that must be in the range (0.001 to 1000).
+ *  For example, if the current MIDI file tempo is 120 bpm and the multiplier
+ *  value is 0.5 then this tempo will be slowed down to 60 bpm.
+ *  At creation, the player is set to be controlled by internal tempo with a
+ *  multiplier factor set to 1.0.
+ *
+ *  #FLUID_PLAYER_TEMPO_EXTERNAL_BPM, the player will be controlled by the
+ *  external tempo value provided  by the tempo parameter in bpm
+ *  (i.e in quarter notes per minute) which must be in the range (1 to 60000000).
+ *
+ *  #FLUID_PLAYER_TEMPO_EXTERNAL_MIDI, similar as FLUID_PLAYER_TEMPO_EXTERNAL_BPM,
+ *  but the tempo parameter value is in  micro seconds per quarter note which
+ *  must be in the range (1 to 60000000).
+ *  Using micro seconds per quarter note is convenient when the tempo value is
+ *  derived from MIDI clock realtime messages.
+ *
+ * @note When the player is controlled by an external tempo
+ * (#FLUID_PLAYER_TEMPO_EXTERNAL_BPM or #FLUID_PLAYER_TEMPO_EXTERNAL_MIDI) it
+ * continues to memorize the most recent internal tempo change coming from the
+ * MIDI file so that next call to fluid_player_set_tempo() with
+ * #FLUID_PLAYER_TEMPO_INTERNAL will set the player to follow this internal
+ * tempo.
+ *
+ * @warning If the function is called when no MIDI file is loaded or currently playing, it
+ * would have caused a division by zero in fluidsynth 2.2.7 and earlier. Starting with 2.2.8, the
+ * new tempo change will be stashed and applied later.
+ *
+ * @return #FLUID_OK if success or #FLUID_FAILED otherwise (incorrect parameters).
+ * @since 2.2.0
+ */
+int fluid_player_set_tempo(fluid_player_t *player, int tempo_type, double tempo)
+{
+    fluid_return_val_if_fail(player != NULL, FLUID_FAILED);
+    fluid_return_val_if_fail(tempo_type >= FLUID_PLAYER_TEMPO_INTERNAL, FLUID_FAILED);
+    fluid_return_val_if_fail(tempo_type < FLUID_PLAYER_TEMPO_NBR, FLUID_FAILED);
+
+    switch(tempo_type)
+    {
+        /* set the player to be driven by internal tempo coming from MIDI file */
+        case FLUID_PLAYER_TEMPO_INTERNAL:
+            /* check if the multiplier is in correct range */
+            fluid_return_val_if_fail(tempo >= MIN_TEMPO_MULTIPLIER, FLUID_FAILED);
+            fluid_return_val_if_fail(tempo <= MAX_TEMPO_MULTIPLIER, FLUID_FAILED);
+
+            /* set the tempo multiplier */
+            fluid_atomic_float_set(&player->multempo, (float)tempo);
+            fluid_atomic_int_set(&player->sync_mode, 1); /* set internal mode */
+            break;
+
+        /* set the player to be driven by external tempo */
+        case FLUID_PLAYER_TEMPO_EXTERNAL_BPM:  /* value in bpm */
+        case FLUID_PLAYER_TEMPO_EXTERNAL_MIDI: /* value in us/quarter note */
+            /* check if tempo is in correct range */
+            fluid_return_val_if_fail(tempo >= MIN_TEMPO_VALUE, FLUID_FAILED);
+            fluid_return_val_if_fail(tempo <= MAX_TEMPO_VALUE, FLUID_FAILED);
+
+            /* set the tempo value */
+            if(tempo_type == FLUID_PLAYER_TEMPO_EXTERNAL_BPM)
+            {
+                tempo = 60000000L / tempo; /* convert tempo in us/quarter note */
+            }
+            fluid_atomic_int_set(&player->exttempo, (int)tempo);
+            fluid_atomic_int_set(&player->sync_mode, 0); /* set external mode */
+            break;
+
+        default: /* shouldn't happen */
+            break;
+    }
+
+    /* update deltatime depending of current tempo */
+    fluid_player_update_tempo(player);
+
     return FLUID_OK;
 }
 
@@ -2232,18 +2514,13 @@ int fluid_player_set_loop(fluid_player_t *player, int loop)
  * @param tempo Tempo to set playback speed to (in microseconds per quarter note, as per MIDI file spec)
  * @return Always returns #FLUID_OK
  * @note Tempo change events contained in the MIDI file can override the specified tempo at any time!
+ * @deprecated Use fluid_player_set_tempo() instead.
  */
 int fluid_player_set_midi_tempo(fluid_player_t *player, int tempo)
 {
     player->miditempo = tempo;
-    player->deltatime = (double) tempo / player->division / 1000.0; /* in milliseconds */
-    player->start_msec = player->cur_msec;
-    player->start_ticks = player->cur_ticks;
 
-    FLUID_LOG(FLUID_DBG,
-              "tempo=%d, tick time=%f msec, cur time=%d msec, cur tick=%d",
-              tempo, player->deltatime, player->cur_msec, player->cur_ticks);
-
+    fluid_player_update_tempo(player);
     return FLUID_OK;
 }
 
@@ -2253,9 +2530,15 @@ int fluid_player_set_midi_tempo(fluid_player_t *player, int tempo)
  * @param bpm Tempo in beats per minute
  * @return Always returns #FLUID_OK
  * @note Tempo change events contained in the MIDI file can override the specified BPM at any time!
+ * @deprecated Use fluid_player_set_tempo() instead.
  */
 int fluid_player_set_bpm(fluid_player_t *player, int bpm)
 {
+    if(bpm <= 0)
+    {
+        return FLUID_FAILED; /* to avoid a division by 0 */
+    }
+
     return fluid_player_set_midi_tempo(player, 60000000L / bpm);
 }
 
@@ -2263,6 +2546,9 @@ int fluid_player_set_bpm(fluid_player_t *player, int bpm)
  * Wait for a MIDI player until the playback has been stopped.
  * @param player MIDI player instance
  * @return Always #FLUID_OK
+ *
+ * @warning The player may still be used by a concurrently running synth context. Hence it is
+ * not safe to immediately delete the player afterwards. Also refer to delete_fluid_player().
  */
 int
 fluid_player_join(fluid_player_t *player)
@@ -2313,25 +2599,64 @@ int fluid_player_get_total_ticks(fluid_player_t *player)
 }
 
 /**
- * Get the tempo of a MIDI player in beats per minute.
- * @param player MIDI player instance
- * @return MIDI player tempo in BPM
+ * Get the tempo currently used by a MIDI player.
+ * The player can be controlled by internal tempo coming from MIDI file tempo
+ * change or controlled by external tempo see fluid_player_set_tempo().
+ * @param player MIDI player instance. Must be a valid pointer.
+ * @return MIDI player tempo in BPM or FLUID_FAILED if error.
  * @since 1.1.7
  */
 int fluid_player_get_bpm(fluid_player_t *player)
 {
-    return 60000000L / player->miditempo;
+
+    int midi_tempo = fluid_player_get_midi_tempo(player);
+
+    if(midi_tempo > 0)
+    {
+        midi_tempo = 60000000L / midi_tempo; /* convert in bpm */
+    }
+
+    return midi_tempo;
 }
 
 /**
- * Get the tempo of a MIDI player.
- * @param player MIDI player instance
- * @return Tempo of the MIDI player (in microseconds per quarter note, as per MIDI file spec)
+ * Get the division currently used by a MIDI player.
+ * The player can be controlled by internal tempo coming from MIDI file tempo
+ * change or controlled by external tempo see fluid_player_set_tempo().
+ * @param player MIDI player instance. Must be a valid pointer.
+ * @return MIDI player division or FLUID_FAILED if error.
+ * @since 2.3.2
+ */
+int fluid_player_get_division(fluid_player_t *player)
+{
+    return player->division;
+}
+
+/**
+ * Get the tempo currently used by a MIDI player.
+ * The player can be controlled by internal tempo coming from MIDI file tempo
+ * change or controlled by external tempo see fluid_player_set_tempo().
+
+ * @param player MIDI player instance. Must be a valid pointer.
+ * @return Tempo of the MIDI player (in microseconds per quarter note, as per
+ * MIDI file spec) or FLUID_FAILED if error.
  * @since 1.1.7
  */
 int fluid_player_get_midi_tempo(fluid_player_t *player)
 {
-    return player->miditempo;
+    int midi_tempo; /* value to return */
+
+    fluid_return_val_if_fail(player != NULL, FLUID_FAILED);
+
+    midi_tempo = fluid_atomic_int_get(&player->exttempo);
+    /* look if the player is internally synced */
+    if(fluid_atomic_int_get(&player->sync_mode))
+    {
+        midi_tempo = (int)((float)fluid_atomic_int_get(&player->miditempo)/
+                           fluid_atomic_float_get(&player->multempo));
+    }
+
+    return midi_tempo;
 }
 
 /************************************************************************
@@ -2390,14 +2715,9 @@ fluid_midi_parser_parse(fluid_midi_parser_t *parser, unsigned char c)
      * of another message. */
     if(c >= 0xF8)
     {
-        if(c == MIDI_SYSTEM_RESET)
-        {
-            parser->event.type = c;
-            parser->status = 0; /* clear the status */
-            return &parser->event;
-        }
-
-        return NULL;
+        parser->event.type = c;
+        parser->status = 0; /* clear the status */
+        return &parser->event;
     }
 
     /* Status byte? - If previous message not yet complete, it is discarded (re-sync). */

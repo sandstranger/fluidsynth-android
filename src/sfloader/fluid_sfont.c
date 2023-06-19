@@ -39,18 +39,24 @@ int default_fclose(void *handle)
     return FLUID_FCLOSE((FILE *)handle) == 0 ? FLUID_OK : FLUID_FAILED;
 }
 
-long default_ftell(void *handle)
+fluid_long_long_t default_ftell(void *handle)
 {
     return FLUID_FTELL((FILE *)handle);
 }
 
-int safe_fread(void *buf, int count, void *fd)
+#ifdef _WIN32
+#define FLUID_PRIi64 "I64d"
+#else
+#define FLUID_PRIi64 "lld"
+#endif
+
+int safe_fread(void *buf, fluid_long_long_t count, void *fd)
 {
-    if(FLUID_FREAD(buf, count, 1, (FILE *)fd) != 1)
+    if(FLUID_FREAD(buf, (size_t)count, 1, (FILE *)fd) != 1)
     {
         if(feof((FILE *)fd))
         {
-            FLUID_LOG(FLUID_ERR, "EOF while attempting to read %d bytes", count);
+            FLUID_LOG(FLUID_ERR, "EOF while attempting to read %" FLUID_PRIi64 " bytes", count);
         }
         else
         {
@@ -63,16 +69,18 @@ int safe_fread(void *buf, int count, void *fd)
     return FLUID_OK;
 }
 
-int safe_fseek(void *fd, long ofs, int whence)
+int safe_fseek(void *fd, fluid_long_long_t ofs, int whence)
 {
     if(FLUID_FSEEK((FILE *)fd, ofs, whence) != 0)
     {
-        FLUID_LOG(FLUID_ERR, "File seek failed with offset = %ld and whence = %d", ofs, whence);
+        FLUID_LOG(FLUID_ERR, "File seek failed with offset = %" FLUID_PRIi64 " and whence = %d", ofs, whence);
         return FLUID_FAILED;
     }
 
     return FLUID_OK;
 }
+
+#undef FLUID_PRIi64
 
 /**
  * Creates a new SoundFont loader.
@@ -155,8 +163,6 @@ void *fluid_sfloader_get_data(fluid_sfloader_t *loader)
 /**
  * Set custom callbacks to be used upon soundfont loading.
  *
- * Useful for loading a soundfont from memory, see \a doc/fluidsynth_sfload_mem.c as an example.
- *
  * @param loader The SoundFont loader instance.
  * @param open A function implementing #fluid_sfloader_callback_open_t.
  * @param read A function implementing #fluid_sfloader_callback_read_t.
@@ -164,6 +170,9 @@ void *fluid_sfloader_get_data(fluid_sfloader_t *loader)
  * @param tell A function implementing #fluid_sfloader_callback_tell_t.
  * @param close A function implementing #fluid_sfloader_callback_close_t.
  * @return #FLUID_OK if the callbacks have been successfully set, #FLUID_FAILED otherwise.
+ *
+ * Useful for loading a soundfont from memory, see \a doc/fluidsynth_sfload_mem.c as an example.
+ *
  */
 int fluid_sfloader_set_callbacks(fluid_sfloader_t *loader,
                                  fluid_sfloader_callback_open_t open,
@@ -195,6 +204,7 @@ int fluid_sfloader_set_callbacks(fluid_sfloader_t *loader,
 
 /**
  * Creates a new virtual SoundFont instance structure.
+ *
  * @param get_name A function implementing #fluid_sfont_get_name_t.
  * @param get_preset A function implementing #fluid_sfont_get_preset_t.
  * @param iter_start A function implementing #fluid_sfont_iteration_start_t, or NULL if preset iteration not needed.
@@ -284,8 +294,8 @@ const char *fluid_sfont_get_name(fluid_sfont_t *sfont)
 }
 
 /**
- * Retrieve the preset assigned the a SoundFont instance
- * for the given bank and preset number.
+ * Retrieve the preset assigned the a SoundFont instance for the given bank and preset number.
+ *
  * @param sfont The SoundFont instance.
  * @param bank bank number of the preset
  * @param prenum program number of the preset
@@ -299,6 +309,7 @@ fluid_preset_t *fluid_sfont_get_preset(fluid_sfont_t *sfont, int bank, int prenu
 
 /**
  * Starts / re-starts virtual preset iteration in a SoundFont.
+ *
  * @param sfont Virtual SoundFont instance
  */
 void fluid_sfont_iteration_start(fluid_sfont_t *sfont)
@@ -328,10 +339,11 @@ fluid_preset_t *fluid_sfont_iteration_next(fluid_sfont_t *sfont)
 /**
  * Destroys a SoundFont instance created with new_fluid_sfont().
  *
- * Implements #fluid_sfont_free_t.
- *
  * @param sfont The SoundFont instance to destroy.
  * @return Always returns 0.
+ *
+ * Implements #fluid_sfont_free_t.
+ *
  */
 int delete_fluid_sfont(fluid_sfont_t *sfont)
 {
@@ -466,9 +478,10 @@ fluid_sfont_t *fluid_preset_get_sfont(fluid_preset_t *preset)
 /**
  * Destroys a SoundFont preset instance created with new_fluid_preset().
  *
+ * @param preset The SoundFont preset instance to destroy.
+ *
  * Implements #fluid_preset_free_t.
  *
- * @param preset The SoundFont preset instance to destroy.
  */
 void delete_fluid_preset(fluid_preset_t *preset)
 {
@@ -479,6 +492,7 @@ void delete_fluid_preset(fluid_preset_t *preset)
 
 /**
  * Create a new sample instance.
+ *
  * @return  The sample on success, NULL otherwise.
  */
 fluid_sample_t *
@@ -501,6 +515,7 @@ new_fluid_sample()
 
 /**
  * Destroy a sample instance previously created with new_fluid_sample().
+ *
  * @param sample The sample to destroy.
  */
 void
@@ -520,9 +535,9 @@ delete_fluid_sample(fluid_sample_t *sample)
 /**
  * Returns the size of the fluid_sample_t structure.
  *
- * Useful in low latency scenarios e.g. to allocate a pool of samples.
- *
  * @return Size of fluid_sample_t in bytes
+ *
+ * Useful in low latency scenarios e.g. to allocate a pool of samples.
  *
  * @note It is recommend to zero initialize the memory before using the object.
  *
@@ -535,6 +550,7 @@ size_t fluid_sample_sizeof()
 
 /**
  * Set the name of a SoundFont sample.
+ *
  * @param sample SoundFont sample
  * @param name Name to assign to sample (20 chars in length + zero terminator)
  * @return #FLUID_OK on success, #FLUID_FAILED otherwise
@@ -550,6 +566,7 @@ int fluid_sample_set_name(fluid_sample_t *sample, const char *name)
 
 /**
  * Assign sample data to a SoundFont sample.
+ *
  * @param sample SoundFont sample
  * @param data Buffer containing 16 bit (mono-)audio sample data
  * @param data24 If not NULL, pointer to the least significant byte counterparts of each sample data point in order to create 24 bit audio samples
@@ -771,12 +788,19 @@ int fluid_sample_sanitize_loop(fluid_sample_t *sample, unsigned int buffer_size)
     if(sample->loopstart == sample->loopend)
     {
         /* Some SoundFonts disable loops by setting loopstart = loopend. While
-         * technically invalid, we decided to accept those samples anyway. Just
-         * ensure that those two pointers are within the sampledata by setting
-         * them to 0. Don't report the modification, as this change has no audible
-         * effect. */
-        sample->loopstart = sample->loopend = 0;
-        return FALSE;
+         * technically invalid, we decided to accept those samples anyway.
+         * Before fluidsynth 2.2.5 we've set those indices to zero, as this
+         * change was believed to be inaudible. This turned out to be an
+         * incorrect assumption, as the loop points may still be modified by
+         * loop offset modulators afterwards.
+         */
+        if(sample->loopstart != sample->start)
+        {
+            // Many soundfonts set loopstart == loopend == sample->start to disabled to loop.
+            // Only report cases where it's not equal to the sample->start, to avoid spam.
+            FLUID_LOG(FLUID_DBG, "Sample '%s': zero length loop detected: loopstart == loopend == '%d', sample start '%d', using it anyway",
+                    sample->name, sample->loopstart, sample->start);
+        }
     }
     else if(sample->loopstart > sample->loopend)
     {

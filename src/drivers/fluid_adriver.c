@@ -40,16 +40,6 @@ struct _fluid_audriver_definition_t
 /* Available audio drivers, listed in order of preference */
 static const fluid_audriver_definition_t fluid_audio_drivers[] =
 {
-#if JACK_SUPPORT
-    {
-        "jack",
-        new_fluid_jack_audio_driver,
-        new_fluid_jack_audio_driver2,
-        delete_fluid_jack_audio_driver,
-        fluid_jack_audio_driver_settings
-    },
-#endif
-
 #if ALSA_SUPPORT
     {
         "alsa",
@@ -60,6 +50,16 @@ static const fluid_audriver_definition_t fluid_audio_drivers[] =
     },
 #endif
 
+#if JACK_SUPPORT
+    {
+        "jack",
+        new_fluid_jack_audio_driver,
+        new_fluid_jack_audio_driver2,
+        delete_fluid_jack_audio_driver,
+        fluid_jack_audio_driver_settings
+    },
+#endif
+
 #if PULSE_SUPPORT
     {
         "pulseaudio",
@@ -67,6 +67,16 @@ static const fluid_audriver_definition_t fluid_audio_drivers[] =
         new_fluid_pulse_audio_driver2,
         delete_fluid_pulse_audio_driver,
         fluid_pulse_audio_driver_settings
+    },
+#endif
+
+#if PIPEWIRE_SUPPORT
+    {
+        "pipewire",
+        new_fluid_pipewire_audio_driver,
+        new_fluid_pipewire_audio_driver2,
+        delete_fluid_pipewire_audio_driver,
+        fluid_pipewire_audio_driver_settings
     },
 #endif
 
@@ -114,9 +124,19 @@ static const fluid_audriver_definition_t fluid_audio_drivers[] =
     {
         "dsound",
         new_fluid_dsound_audio_driver,
-        NULL,
+        new_fluid_dsound_audio_driver2,
         delete_fluid_dsound_audio_driver,
         fluid_dsound_audio_driver_settings
+    },
+#endif
+
+#if WASAPI_SUPPORT
+    {
+        "wasapi",
+        new_fluid_wasapi_audio_driver,
+        new_fluid_wasapi_audio_driver2,
+        delete_fluid_wasapi_audio_driver,
+        fluid_wasapi_audio_driver_settings
     },
 #endif
 
@@ -124,7 +144,7 @@ static const fluid_audriver_definition_t fluid_audio_drivers[] =
     {
         "waveout",
         new_fluid_waveout_audio_driver,
-        NULL,
+        new_fluid_waveout_audio_driver2,
         delete_fluid_waveout_audio_driver,
         fluid_waveout_audio_driver_settings
     },
@@ -200,7 +220,7 @@ void fluid_audio_driver_settings(fluid_settings_t *settings)
     fluid_settings_add_option(settings, "audio.sample-format", "16bits");
     fluid_settings_add_option(settings, "audio.sample-format", "float");
 
-#if defined(WIN32)
+#if defined(_WIN32)
     fluid_settings_register_int(settings, "audio.period-size", 512, 64, 8192, 0);
     fluid_settings_register_int(settings, "audio.periods", 8, 2, 64, 0);
 #elif defined(MACOS9)
@@ -271,11 +291,11 @@ find_fluid_audio_driver(fluid_settings_t *settings)
     {
         if(allnames[0] != '\0')
         {
-            FLUID_LOG(FLUID_INFO, "Valid drivers are: %s", allnames);
+            FLUID_LOG(FLUID_INFO, "This build of fluidsynth supports the following audio drivers: %s", allnames);
         }
         else
         {
-            FLUID_LOG(FLUID_INFO, "No audio drivers available.");
+            FLUID_LOG(FLUID_INFO, "This build of fluidsynth doesn't support any audio drivers.");
         }
 
         FLUID_FREE(allnames);
@@ -288,6 +308,7 @@ find_fluid_audio_driver(fluid_settings_t *settings)
 
 /**
  * Create a new audio driver.
+ *
  * @param settings Configuration settings used to select and create the audio
  *   driver.
  * @param synth Synthesizer instance for which the audio driver is created for.
@@ -299,8 +320,9 @@ find_fluid_audio_driver(fluid_settings_t *settings)
  * Otherwise the behaviour is undefined.
  *
  * @note As soon as an audio driver is created, the \p synth starts rendering audio.
- * This means that all necessary sound-setup should be completed after this point,
- * thus of all object types in use (synth, midi player, sequencer, etc.) the audio
+ * This means that all necessary initialization and sound-setup should have been
+ * completed before calling this function.
+ * Thus, of all object types in use (synth, midi player, sequencer, etc.) the audio
  * driver should always be the last one to be created and the first one to be deleted!
  * Also refer to the order of object creation in the code examples.
  */
@@ -311,7 +333,20 @@ new_fluid_audio_driver(fluid_settings_t *settings, fluid_synth_t *synth)
 
     if(def)
     {
-        fluid_audio_driver_t *driver = (*def->new)(settings, synth);
+        fluid_audio_driver_t *driver;
+        double srate, midi_event_latency;
+        int period_size;
+        
+        fluid_settings_getint(settings, "audio.period-size", &period_size);
+        fluid_settings_getnum(settings, "synth.sample-rate", &srate);
+        
+        midi_event_latency = period_size / srate;
+        if(midi_event_latency >= 0.05)
+        {
+            FLUID_LOG(FLUID_WARN, "You have chosen 'audio.period-size' to be %d samples. Given a sample rate of %.1f this results in a latency of %.1f ms, which will cause MIDI events to be poorly quantized (=untimed) in the synthesized audio (also known as the 'drunken-drummer' syndrome). To avoid that, you're strongly advised to increase 'audio.periods' instead, while keeping 'audio.period-size' small enough to make this warning disappear.", period_size, srate, midi_event_latency*1000.0);
+        }
+        
+        driver = (*def->new)(settings, synth);
 
         if(driver)
         {
@@ -326,6 +361,7 @@ new_fluid_audio_driver(fluid_settings_t *settings, fluid_synth_t *synth)
 
 /**
  * Create a new audio driver.
+ *
  * @param settings Configuration settings used to select and create the audio
  *   driver.
  * @param func Function called to fill audio buffers for audio playback
@@ -378,6 +414,7 @@ new_fluid_audio_driver2(fluid_settings_t *settings, fluid_audio_func_t func, voi
 
 /**
  * Deletes an audio driver instance.
+ *
  * @param driver Audio driver instance to delete
  *
  * Shuts down an audio driver and deletes its instance.
@@ -391,7 +428,11 @@ delete_fluid_audio_driver(fluid_audio_driver_t *driver)
 
 
 /**
- * @brief Registers audio drivers to use
+ * Registers audio drivers to use
+ *
+ * @param adrivers NULL-terminated array of audio drivers to register. Pass NULL to register all available drivers.
+ * @return #FLUID_OK if all the audio drivers requested by the user are supported by fluidsynth and have been
+ * successfully registered. Otherwise #FLUID_FAILED is returned and this function has no effect.
  *
  * When creating a settings instance with new_fluid_settings(), all audio drivers are initialized once.
  * In the past this has caused segfaults and application crashes due to buggy soundcard drivers.
@@ -405,13 +446,10 @@ delete_fluid_audio_driver(fluid_audio_driver_t *driver)
  *
  * @warning This function may only be called if no thread is residing in fluidsynth's API and no instances of any kind
  * are alive (e.g. as it would be the case right after fluidsynth's initial creation). Else the behaviour is undefined.
- * Furtermore any attempt of using audio drivers that have not been registered is undefined behaviour!
- *
- * @param adrivers NULL-terminated array of audio drivers to register. Pass NULL to register all available drivers.
- * @return #FLUID_OK if all the audio drivers requested by the user are supported by fluidsynth and have been
- * successfully registered. Otherwise #FLUID_FAILED is returned and this function has no effect.
+ * Furthermore any attempt of using audio drivers that have not been registered is undefined behaviour!
  *
  * @note This function is not thread safe and will never be!
+ *
  * @since 1.1.9
  */
 int fluid_audio_driver_register(const char **adrivers)
