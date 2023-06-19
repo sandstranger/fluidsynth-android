@@ -34,6 +34,81 @@
 // Do not include pthread on windows. It includes winsock.h, which collides with ws2tcpip.h from fluid_sys.h
 // It isn't need on Windows anyway.
 #include <pthread.h>
+
+static pthread_mutex_t g_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
+
+int
+pthread_atomic_int_get(const volatile int *atomic)
+{
+  int value;
+
+  pthread_mutex_lock (&g_atomic_lock);
+  value = *atomic;
+  pthread_mutex_unlock (&g_atomic_lock);
+
+  return value;
+}
+
+void
+pthread_atomic_int_inc(volatile int *atomic)
+{
+  pthread_mutex_lock (&g_atomic_lock);
+  (*atomic)++;
+  pthread_mutex_unlock (&g_atomic_lock);
+}
+
+void
+pthread_atomic_int_set(volatile int *atomic,
+                    int           value)
+{
+  pthread_mutex_lock (&g_atomic_lock);
+  *atomic = value;
+  pthread_mutex_unlock (&g_atomic_lock);
+}
+
+bool
+pthread_atomic_int_dec_and_test (volatile int *atomic)
+{
+  bool is_zero;
+
+  pthread_mutex_lock (&g_atomic_lock);
+  is_zero = --(*atomic) == 0;
+  pthread_mutex_unlock (&g_atomic_lock);
+
+  return is_zero;
+}
+
+bool
+pthread_atomic_int_compare_and_exchange(volatile int *atomic,
+                                     int           oldval,
+                                     int           newval)
+{
+  bool success;
+
+  pthread_mutex_lock (&g_atomic_lock);
+
+  if ((success = (*atomic == oldval)))
+    *atomic = newval;
+
+  pthread_mutex_unlock (&g_atomic_lock);
+
+  return success;
+}
+
+int
+pthread_atomic_int_add(volatile int *atomic,
+                    int           val)
+{
+  int oldval;
+
+  pthread_mutex_lock (&g_atomic_lock);
+  oldval = *atomic;
+  *atomic = oldval + val;
+  pthread_mutex_unlock (&g_atomic_lock);
+
+  return oldval;
+}
+
 #endif
 
 /* WIN32 HACK - Flag used to differentiate between a file descriptor and a socket.

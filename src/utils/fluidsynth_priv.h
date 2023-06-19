@@ -77,15 +77,9 @@ typedef double fluid_real_t;
 
 
 /** Atomic types */
-typedef struct {
-    volatile int value;
-} fluid_atomic_int_t;
-typedef struct {
-    volatile unsigned value;
-} fluid_atomic_uint_t;
-typedef struct {
-    volatile float value;
-} fluid_atomic_float_t;
+typedef int fluid_atomic_int_t;
+typedef unsigned int fluid_atomic_uint_t;
+typedef float fluid_atomic_float_t;
 
 /***************************************************************
  *

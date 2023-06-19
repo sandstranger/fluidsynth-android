@@ -172,6 +172,7 @@ char* fluid_get_windows_error(void);
 #define FLUID_INT_TO_POINTER(x)   ((void *)(intptr_t)(x))
 
 /* Endian detection */
+#include <stdbool.h>
 #define FLUID_IS_BIG_ENDIAN       false
 
 #define FLUID_LE32TOH(x)          le32toh(x)
@@ -342,7 +343,45 @@ int fluid_thread_join(fluid_thread_t *thread);
 
 /* Atomic operations */
 
-#include "fluid_atomic.h"
+#if HAVE_PTHREAD_H
+
+int pthread_atomic_int_get(const volatile int *atomic);
+void pthread_atomic_int_inc(volatile int *atomic);
+void pthread_atomic_int_set(volatile int *atomic, int value);
+bool pthread_atomic_int_dec_and_test (volatile int *atomic);
+bool pthread_atomic_int_compare_and_exchange(volatile int *atomic, int oldval, int newval);
+int pthread_atomic_int_add(volatile int *atomic, int val);
+
+#define fluid_atomic_int_inc(_pi) pthread_atomic_int_inc(_pi)
+#define fluid_atomic_int_get(_pi) pthread_atomic_int_get(_pi)
+#define fluid_atomic_int_set(_pi, _val) pthread_atomic_int_set(_pi, _val)
+#define fluid_atomic_int_dec_and_test(_pi) pthread_atomic_int_dec_and_test(_pi)
+#define fluid_atomic_int_compare_and_exchange(_pi, _old, _new) \
+  pthread_atomic_int_compare_and_exchange(_pi, _old, _new)
+#define fluid_atomic_int_add(_pi, _add) \
+  pthread_atomic_int_add(_pi, _add)
+#define fluid_atomic_int_exchange_and_add(_pi, _add) \
+  pthread_atomic_int_add(_pi, _add)
+
+static FLUID_INLINE void
+fluid_atomic_float_set(fluid_atomic_float_t *fptr, float val)
+{
+    int32_t ival;
+    memcpy(&ival, &val, 4);
+    fluid_atomic_int_set((fluid_atomic_int_t *)fptr, ival);
+}
+
+static FLUID_INLINE float
+fluid_atomic_float_get(fluid_atomic_float_t *fptr)
+{
+    int32_t ival;
+    float fval;
+    ival = fluid_atomic_int_get((fluid_atomic_int_t *)fptr);
+    memcpy(&fval, &ival, 4);
+    return fval;
+}
+
+#endif
 
 /* Sockets and I/O */
 
