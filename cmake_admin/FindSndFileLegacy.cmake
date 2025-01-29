@@ -50,7 +50,7 @@ find_path(
 
 find_library(
   _sndfile_library
-  NAMES "sndfile"
+  NAMES "sndfile" "sndfile-1"
   HINTS "${PC_SNDFILE_LIBDIR}")
 
 # Get version from pkg-config or read the config header
@@ -69,7 +69,8 @@ elseif(SndFile_INCLUDE_DIR)
 endif()
 
 # Check the features SndFile was built with
-if(PC_SNDFILE_FOUND)
+# 2024-01-02: Recent versions of libsndfile don't seem to provide a pkgconfig file and older version who did are lacking private libraries like OGG.
+if(FALSE) #PC_SNDFILE_FOUND
   if("vorbis" IN_LIST PC_SNDFILE_STATIC_LIBRARIES)
     set(SndFile_WITH_EXTERNAL_LIBS TRUE)
   endif()
@@ -154,11 +155,11 @@ endif()
 # Forward the result to CMake
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(
-  SndFile
+  SndFileLegacy
   REQUIRED_VARS "_sndfile_library" "SndFile_INCLUDE_DIR"
   VERSION_VAR "SndFile_VERSION")
 
-if(SndFile_FOUND AND NOT TARGET SndFile::sndfile)
+if(SndFileLegacy_FOUND AND NOT TARGET SndFile::sndfile)
   add_library(SndFile::sndfile UNKNOWN IMPORTED)
   set_target_properties(
     SndFile::sndfile
@@ -170,6 +171,7 @@ if(SndFile_FOUND AND NOT TARGET SndFile::sndfile)
 
   # Set additional variables for compatibility with upstream config
   set(SNDFILE_FOUND TRUE)
+  set(SndFile_FOUND TRUE)
   set(SndFile_LIBRARY SndFile::sndfile)
   set(SndFile_LIBRARIES SndFile::sndfile)
   set(SNDFILE_LIBRARY SndFile::sndfile)

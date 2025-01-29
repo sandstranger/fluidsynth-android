@@ -1,6 +1,6 @@
 # FluidSynth - A Software Synthesizer
 #
-# Copyright (C) 2003-2010 Peter Hanappe and others.
+# Copyright (C) 2003-2025 Peter Hanappe and others.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -77,13 +77,13 @@ if ( OSS_SUPPORT )
   set ( fluid_oss_SOURCES drivers/fluid_oss.c )
 endif ( OSS_SUPPORT )
 
-if ( LASH_SUPPORT )
-  set ( fluid_lash_SOURCES bindings/fluid_lash.c bindings/fluid_lash.h )
-endif ( LASH_SUPPORT )
-
 if ( DART_SUPPORT )
   set ( fluid_dart_SOURCES drivers/fluid_dart.c )
 endif ( DART_SUPPORT )
+
+if ( KAI_SUPPORT )
+  set ( fluid_kai_SOURCES drivers/fluid_kai.c )
+endif ( KAI_SUPPORT )
 
 if ( MIDISHARE_SUPPORT )
   set ( fluid_midishare_SOURCES drivers/fluid_midishare.c )
@@ -139,7 +139,7 @@ set ( libfluidsynth_SOURCES
     rvoice/fluid_lfo.h
     rvoice/fluid_rvoice.h
     rvoice/fluid_rvoice.c
-    rvoice/fluid_rvoice_dsp.c
+    rvoice/fluid_rvoice_dsp.cpp
     rvoice/fluid_rvoice_event.h
     rvoice/fluid_rvoice_event.c
     rvoice/fluid_rvoice_mixer.h
@@ -205,26 +205,17 @@ set ( public_main_HEADER
     ${FluidSynth_BINARY_DIR}/include/fluidsynth.h
 )
 
-configure_file ( ${FluidSynth_SOURCE_DIR}/include/fluidsynth/version.h.in 
+configure_file ( ${FluidSynth_SOURCE_DIR}/include/fluidsynth/version.h.in
                  ${FluidSynth_BINARY_DIR}/include/fluidsynth/version.h )
 configure_file ( ${FluidSynth_SOURCE_DIR}/include/fluidsynth.cmake
                  ${public_main_HEADER} )
 
 if ( WIN32 )
-include(generate_product_version)
-generate_product_version(
-    VersionFilesOutputVariable
-    NAME "Fluidsynth"
-    BUNDLE "Fluidsynth"
-    VERSION_MAJOR ${FLUIDSYNTH_VERSION_MAJOR}
-    VERSION_MINOR ${FLUIDSYNTH_VERSION_MINOR}
-    VERSION_PATCH ${FLUIDSYNTH_VERSION_MICRO}
-    VERSION_REVISION 0
-    COMMENTS "Fluidsynth"
-    COMPANY_NAME "Fluidsynth LGPL"
-    ORIGINAL_FILENAME "libfluidsynth.dll"
-    FILE_DESCRIPTION "Fluidsynth"
-)
+    set(TARGET_TYPE "VFT_DLL")
+    set(TARGET_FILENAME "libfluidsynth-${LIB_VERSION_CURRENT}.dll")
+    set(PRODUCT_NAME "FluidSynth Library")
+    set(VersionFilesOutputVariable "${FluidSynth_BINARY_DIR}/src/VersionInfoLib.rc")
+    configure_file(${FluidSynth_SOURCE_DIR}/cmake_admin/VersionResource.rc.in ${VersionFilesOutputVariable} @ONLY)
 endif ( WIN32 )
 
 add_library ( libfluidsynth-OBJ OBJECT
@@ -236,8 +227,8 @@ add_library ( libfluidsynth-OBJ OBJECT
     ${fluid_dart_SOURCES}
     ${fluid_dbus_SOURCES}
     ${fluid_jack_SOURCES}
+    ${fluid_kai_SOURCES}
     ${fluid_pipewire_SOURCES}
-    ${fluid_lash_SOURCES}
     ${fluid_midishare_SOURCES}
     ${fluid_opensles_SOURCES}
     ${fluid_oboe_SOURCES}
@@ -275,6 +266,14 @@ if ( LIBFLUID_CPPFLAGS )
     PROPERTIES COMPILE_FLAGS ${LIBFLUID_CPPFLAGS} )
 endif ( LIBFLUID_CPPFLAGS )
 
+# The CMake Xcode generator fails to build the framework unless it references
+# a source file. Create an empty one in the build directory to use for this
+# purpose.
+if ( MACOSX_FRAMEWORK )
+  set ( MACOSX_FRAMEWORK_SOURCE_HACK ${CMAKE_BINARY_DIR}/empty_file_for_linking_issue.cpp )
+  file ( TOUCH ${MACOSX_FRAMEWORK_SOURCE_HACK} )
+endif ( MACOSX_FRAMEWORK )
+
 # Note: by default this target creates a shared object (or dll). To build a
 # static library instead, set the option BUILD_SHARED_LIBS to FALSE.
 # Further note: The headers must be explicitly added here to have CMake install
@@ -283,6 +282,7 @@ add_library ( libfluidsynth
     $<TARGET_OBJECTS:libfluidsynth-OBJ>
     ${public_main_HEADER}
     ${public_HEADERS}
+    ${MACOSX_FRAMEWORK_SOURCE_HACK}
 )
 
 if ( MACOSX_FRAMEWORK )
@@ -311,8 +311,6 @@ elseif ( WIN32 )
   set_target_properties ( libfluidsynth
     PROPERTIES
       PUBLIC_HEADER "${public_HEADERS}"
-      ARCHIVE_OUTPUT_NAME "fluidsynth"
-      PREFIX "lib"
       OUTPUT_NAME "fluidsynth-${LIB_VERSION_CURRENT}"
       VERSION ${LIB_VERSION_INFO}
       SOVERSION ${LIB_VERSION_CURRENT}
@@ -343,6 +341,7 @@ endif ( MACOSX_FRAMEWORK )
 # but since they do not have a link step nothing is done with their object files.
 target_link_libraries ( libfluidsynth-OBJ PUBLIC
     ${DART_LIBS}
+    ${KAI_LIBS}
     ${COREAUDIO_LIBS}
     ${COREMIDI_LIBS}
     ${WINDOWS_LIBS}
@@ -360,7 +359,8 @@ if ( TARGET SndFile::sndfile AND LIBSNDFILE_SUPPORT )
 endif()
 
 if ( PULSE_SUPPORT )
-    target_include_directories( libfluidsynth-OBJ PRIVATE ${PULSEAUDIO_INCLUDE_DIRS} )
+    # need to include PULSEAUDIO_INCLUDE_DIR to make it compile with homebrew on Mac
+    target_include_directories( libfluidsynth-OBJ PRIVATE ${PULSEAUDIO_INCLUDE_DIRS} ${PULSEAUDIO_INCLUDE_DIR} )
     target_link_libraries ( libfluidsynth-OBJ PUBLIC ${PULSEAUDIO_LIBRARIES} )
 endif()
 
@@ -378,10 +378,6 @@ endif()
 
 if ( TARGET PipeWire::PipeWire AND PIPEWIRE_SUPPORT )
     target_link_libraries ( libfluidsynth-OBJ PUBLIC PipeWire::PipeWire )
-endif()
-
-if ( TARGET LASH::LASH AND LASH_SUPPORT )
-    target_link_libraries ( libfluidsynth-OBJ PUBLIC LASH::LASH )
 endif()
 
 if ( TARGET dbus-1 AND DBUS_SUPPORT )
@@ -413,6 +409,10 @@ if ( DART_SUPPORT )
     target_include_directories ( libfluidsynth-OBJ PUBLIC ${DART_INCLUDE_DIRS} )
 endif ( DART_SUPPORT )
 
+if ( KAI_SUPPORT )
+    target_include_directories ( libfluidsynth-OBJ PUBLIC ${KAI_INCLUDE_DIRS} )
+endif ( KAI_SUPPORT )
+
 if ( MIDISHARE_SUPPORT )
     target_link_libraries ( libfluidsynth-OBJ PUBLIC MidiShare::MidiShare )
 endif ( MIDISHARE_SUPPORT )
@@ -438,8 +438,17 @@ if ( WASAPI_SUPPORT )
   set ( fluidsynth_SOURCES ${fluidsynth_SOURCES} fluid_wasapi_device_enumerate.c )
 endif ( WASAPI_SUPPORT )
 
+if ( WIN32 )
+    set(TARGET_TYPE "VFT_APP")
+    set(TARGET_FILENAME "fluidsynth.exe")
+    set(PRODUCT_NAME "FluidSynth CLI")
+    set(VersionFilesOutputVariable "${FluidSynth_BINARY_DIR}/src/VersionInfo.rc")
+    configure_file(${FluidSynth_SOURCE_DIR}/cmake_admin/VersionResource.rc.in ${VersionFilesOutputVariable} @ONLY)
+endif ( WIN32 )
+
 add_executable ( fluidsynth
     ${fluidsynth_SOURCES}
+    ${VersionFilesOutputVariable}
 )
 
 set_target_properties ( fluidsynth
@@ -489,12 +498,8 @@ if ( TARGET PipeWire::PipeWire AND PIPEWIRE_SUPPORT ) # because pw_init() etc.
     target_link_libraries ( fluidsynth PRIVATE PipeWire::PipeWire )
 endif()
 
-if ( TARGET InstPatch::libinstpatch AND LIBINSTPATCH_SUPPORT )
-    target_link_libraries ( fluidsynth PRIVATE InstPatch::libinstpatch )
-endif()
-
-if ( TARGET LASH::LASH AND LASH_SUPPORT )
-    target_link_libraries ( fluidsynth PRIVATE LASH::LASH )
+if ( MINGW AND enable-unicode )
+    target_link_options( fluidsynth PRIVATE -municode )
 endif()
 
 if ( MACOSX_FRAMEWORK )
@@ -542,12 +547,19 @@ set (GENTAB_BDIR ${CMAKE_CURRENT_BINARY_DIR}/gentables)
 # To fix cross-compiling fluidsynth from Win32 to ARM (using vcpkg), we need to pass the current generator
 # on to the external project, otherwise (for some unknown reason) the target compiler will be used rather
 # than the host compiler.
+#
+# Some use-cases however cannot rely on this logic, therefore, FLUID_HOST_COMPILER can be specified to
+# force using a particular host compiler, see https://github.com/FluidSynth/fluidsynth/issues/1301
+if ( FLUID_HOST_COMPILER )
+  set ( EXPLICIT_HOST_COMPILER_STR "-DCMAKE_C_COMPILER=${FLUID_HOST_COMPILER}" )
+endif ()
+
 ExternalProject_Add(gentables
     DOWNLOAD_COMMAND ""
     SOURCE_DIR ${GENTAB_SDIR}
     BINARY_DIR ${GENTAB_BDIR}
     CONFIGURE_COMMAND
-        "${CMAKE_COMMAND}" -DCMAKE_VERBOSE_MAKEFILE=${CMAKE_VERBOSE_MAKEFILE} -G "${CMAKE_GENERATOR}" -B "${GENTAB_BDIR}" "${GENTAB_SDIR}"
+        "${CMAKE_COMMAND}" -DCMAKE_VERBOSE_MAKEFILE=${CMAKE_VERBOSE_MAKEFILE} ${EXPLICIT_HOST_COMPILER_STR} -G "${CMAKE_GENERATOR}" -B "${GENTAB_BDIR}" "${GENTAB_SDIR}"
     BUILD_COMMAND
         "${CMAKE_COMMAND}" --build "${GENTAB_BDIR}"
     INSTALL_COMMAND ${GENTAB_BDIR}/make_tables.exe "${FluidSynth_BINARY_DIR}/"

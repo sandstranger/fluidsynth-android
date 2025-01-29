@@ -145,6 +145,13 @@
 #pragma warning(disable : 4996)
 #endif
 
+/*
+ * Required by Windows-specific sf_wchar_open() from old libsndfile
+ * versions before v1.1.0, that takes a UTF16_BE encoded filename.
+ * Note that FluidSynth needs libsndfile >= v1.2.1 anyway.
+ */
+#define ENABLE_SNDFILE_WINDOWS_PROTOTYPES 1
+
 #endif
 
 /* Darwin special defines (taken from config_macosx.h) */
@@ -666,4 +673,7 @@ static FLUID_INLINE void *fluid_align_ptr(const void *ptr, unsigned int alignmen
 
 #define FLUID_DEFAULT_ALIGNMENT (64U)
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* _FLUID_SYS_H */
