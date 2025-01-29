@@ -29,10 +29,10 @@ set ( PACKAGE "fluidsynth" )
 
 # FluidSynth package version
 set ( FLUIDSYNTH_VERSION_MAJOR 2 )
-set ( FLUIDSYNTH_VERSION_MINOR 3 )
+set ( FLUIDSYNTH_VERSION_MINOR 4 )
 set ( FLUIDSYNTH_VERSION_MICRO 3 )
 set ( VERSION "${FLUIDSYNTH_VERSION_MAJOR}.${FLUIDSYNTH_VERSION_MINOR}.${FLUIDSYNTH_VERSION_MICRO}" )
-set ( FLUIDSYNTH_VERSION "\"${VERSION}\"" )
+set ( FLUIDSYNTH_VERSION ${VERSION} )
 
 # libfluidsynth - Library version
 # *** NOTICE ***
@@ -108,7 +108,7 @@ set ( libfluidsynth_SOURCES
     src/rvoice/fluid_lfo.h
     src/rvoice/fluid_rvoice.c
     src/rvoice/fluid_rvoice.h
-    src/rvoice/fluid_rvoice_dsp.c
+    src/rvoice/fluid_rvoice_dsp.cpp
     src/rvoice/fluid_rvoice_event.c
     src/rvoice/fluid_rvoice_event.h
     src/rvoice/fluid_rvoice_mixer.c

@@ -164,6 +164,10 @@
 #include <gmodule.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if defined(_WIN32) || defined(__CYGWIN__)
 char* fluid_get_windows_error(void);
 #endif
