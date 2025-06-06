@@ -20,7 +20,25 @@
 # CMake based build system. Pedro Lopez-Cabanillas <plcl@users.sf.net>
 
 if ( ANDROID_ABI )
-cmake_minimum_required(VERSION 3.4.1)
+
+cmake_minimum_required ( VERSION 3.13 )
+# 3.1 because of CMAKE_C_STANDARD
+# 3.11 because COMPATIBILITY SameMinorVersion in CMakePackageConfigHelpers
+# 3.13.5 because it is the latest supported in Windows XP
+
+if(POLICY CMP0075) # CMake version 3.13.5 warns when the policy is not set or value is OLD
+  cmake_policy(SET CMP0075 NEW)
+endif()
+
+if(POLICY CMP0091) # new in CMake 3.15, defaults to OLD
+  cmake_policy(SET CMP0091 NEW)
+endif()
+
+if(POLICY CMP0099) # new in CMake 3.17, defaults to OLD
+  cmake_policy(SET CMP0099 NEW)
+elseif(NOT BUILD_SHARED_LIBS)
+  message(WARNING "Your version of CMake is very old. This may cause linking issues if your dependencies are not in your compiler's default search paths.")
+endif()
 
 project ( FluidSynth C CXX )
 
