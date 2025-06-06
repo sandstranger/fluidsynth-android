@@ -48,7 +48,7 @@ set ( PACKAGE "fluidsynth" )
 # FluidSynth package version
 set ( FLUIDSYNTH_VERSION_MAJOR 2 )
 set ( FLUIDSYNTH_VERSION_MINOR 4 )
-set ( FLUIDSYNTH_VERSION_MICRO 3 )
+set ( FLUIDSYNTH_VERSION_MICRO 6 )
 set ( VERSION "${FLUIDSYNTH_VERSION_MAJOR}.${FLUIDSYNTH_VERSION_MINOR}.${FLUIDSYNTH_VERSION_MICRO}" )
 set ( FLUIDSYNTH_VERSION ${VERSION} )
 
@@ -120,6 +120,7 @@ set ( libfluidsynth_SOURCES
     src/rvoice/fluid_adsr_env.h
     src/rvoice/fluid_chorus.c
     src/rvoice/fluid_chorus.h
+    src/rvoice/fluid_iir_filter_impl.cpp
     src/rvoice/fluid_iir_filter.c
     src/rvoice/fluid_iir_filter.h
     src/rvoice/fluid_lfo.c
