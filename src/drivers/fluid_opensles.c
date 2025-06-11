@@ -27,7 +27,6 @@
 #include "fluid_adriver.h"
 
 #if OPENSLES_SUPPORT
-
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>
 

@@ -167,6 +167,7 @@ set ( libfluidsynth_SOURCES
     src/bindings/fluid_filerenderer.c
     android/src/bindings/fluid_cmd.c
     src/bindings/fluid_cmd.h
+    src/drivers/fluid_opensles.c
 )
 
 set ( public_HEADERS
@@ -205,6 +206,8 @@ add_library ( libfluidsynth-OBJ OBJECT
     ${public_main_HEADER}
 )
 
+target_compile_definitions(libfluidsynth-OBJ PRIVATE OPENSLES_SUPPORT)
+
 if(ANDROID_ABI STREQUAL "armeabi-v7a")
         target_compile_options(libfluidsynth-OBJ PRIVATE -DWITH_FLOAT)
 endif()
@@ -222,6 +225,10 @@ target_compile_options(libfluidsynth-OBJ
 )
 
 add_library ( libfluidsynth $<TARGET_OBJECTS:libfluidsynth-OBJ> )
+
+find_library(OPENSL_LIB OpenSLES)
+
+target_link_libraries(libfluidsynth PRIVATE ${OPENSL_LIB})
 
 set_target_properties ( libfluidsynth
     PROPERTIES
@@ -241,6 +248,7 @@ install ( FILES ${public_main_HEADER} DESTINATION include )
 
 # ******* Auto Generated Lookup Tables ******
 
+if (NOT ANDROID)
 include(ExternalProject)
 ExternalProject_Add(gentables
         DOWNLOAD_COMMAND ""
@@ -250,7 +258,7 @@ ExternalProject_Add(gentables
         CMAKE_GENERATOR "Unix Makefiles"
 )
 add_dependencies(libfluidsynth-OBJ gentables)
-
+endif ()
 else ( ANDROID_ABI )
 
 cmake_minimum_required ( VERSION 3.13 )
@@ -979,11 +987,13 @@ if ( enable-midishare )
   set ( MIDISHARE_SUPPORT ${MidiShare_FOUND} )
 endif ( enable-midishare )
 
+if (NOT ANDROID)
 unset ( OPENSLES_SUPPORT CACHE )
 if ( enable-opensles )
   find_package( OpenSLES )
   set ( OPENSLES_SUPPORT ${OpenSLES_FOUND} )
 endif ( enable-opensles )
+endif ()
 
 unset ( ENABLE_MIXER_THREADS CACHE )
 if ( enable-threads )
