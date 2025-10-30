@@ -224,13 +224,13 @@ target_compile_options(libfluidsynth-OBJ
                             "$<$<CONFIG:DEBUG>:-Werror>" # Only include -Werror when building debug config
 )
 
-add_library ( libfluidsynth $<TARGET_OBJECTS:libfluidsynth-OBJ> )
+add_library ( fluidsynth SHARED $<TARGET_OBJECTS:libfluidsynth-OBJ> )
 
 find_library(OPENSL_LIB OpenSLES)
 
-target_link_libraries(libfluidsynth PRIVATE ${OPENSL_LIB})
+target_link_libraries(fluidsynth PRIVATE ${OPENSL_LIB})
 
-set_target_properties ( libfluidsynth
+set_target_properties ( fluidsynth
     PROPERTIES
       PUBLIC_HEADER "${public_HEADERS}"
       PREFIX "lib"
@@ -239,7 +239,7 @@ set_target_properties ( libfluidsynth
       SOVERSION ${LIB_VERSION_CURRENT}
 )
 
-install ( TARGETS libfluidsynth
+install ( TARGETS fluidsynth
     LIBRARY DESTINATION lib/${ANDROID_ABI}
     ARCHIVE DESTINATION lib/${ANDROID_ABI}
     PUBLIC_HEADER DESTINATION include/fluidsynth
