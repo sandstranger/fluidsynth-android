@@ -45,6 +45,15 @@ project ( FluidSynth C CXX )
 # FluidSynth package name
 set ( PACKAGE "fluidsynth" )
 
+if (DEFINED CMAKE_BUILD_TYPE AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(OBOE_LIBRARY "${CMAKE_SOURCE_DIR}/../../../../../oboe/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib/${ANDROID_ABI}/liboboe.so")
+else ()
+  set(OBOE_LIBRARY "${CMAKE_SOURCE_DIR}/../../../../../oboe/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib/${ANDROID_ABI}/liboboe.so")
+endif ()
+
+set(OBOE_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../../../../../oboe/src/main/jni/oboe/include")
+
+
 # FluidSynth package version
 set ( FLUIDSYNTH_VERSION_MAJOR 2 )
 set ( FLUIDSYNTH_VERSION_MINOR 4 )
@@ -68,10 +77,7 @@ set ( LIB_VERSION_INFO
       "${LIB_VERSION_CURRENT}.${LIB_VERSION_AGE}.${LIB_VERSION_REVISION}" )
 
 # the default C standard to use for all targets
-set(CMAKE_C_STANDARD 90)
-
-# the default C++ standard to use for all targets
-set(CMAKE_CXX_STANDARD 98)
+set(CMAKE_C_STANDARD 23)
 
 # whether to use gnu extensions
 set(CMAKE_C_EXTENSIONS ON)
@@ -167,7 +173,7 @@ set ( libfluidsynth_SOURCES
     src/bindings/fluid_filerenderer.c
     android/src/bindings/fluid_cmd.c
     src/bindings/fluid_cmd.h
-    src/drivers/fluid_opensles.c
+    src/drivers/fluid_oboe.cpp
 )
 
 set ( public_HEADERS
@@ -206,7 +212,10 @@ add_library ( libfluidsynth-OBJ OBJECT
     ${public_main_HEADER}
 )
 
-target_compile_definitions(libfluidsynth-OBJ PRIVATE OPENSLES_SUPPORT)
+target_compile_definitions(libfluidsynth-OBJ PRIVATE OBOE_SUPPORT)
+
+target_include_directories(libfluidsynth-OBJ PRIVATE ${OBOE_INCLUDE_DIR})
+
 
 if(ANDROID_ABI STREQUAL "armeabi-v7a")
         target_compile_options(libfluidsynth-OBJ PRIVATE -DWITH_FLOAT)
@@ -226,9 +235,7 @@ target_compile_options(libfluidsynth-OBJ
 
 add_library ( libfluidsynth $<TARGET_OBJECTS:libfluidsynth-OBJ> )
 
-find_library(OPENSL_LIB OpenSLES)
-
-target_link_libraries(libfluidsynth PRIVATE ${OPENSL_LIB})
+target_link_libraries(libfluidsynth PRIVATE ${OBOE_LIBRARY})
 
 set_target_properties ( libfluidsynth
     PROPERTIES
@@ -329,7 +336,7 @@ option ( enable-libinstpatch "use libinstpatch (if available) to load DLS and GI
 option ( enable-libsndfile "compile libsndfile support (if it is available)" on )
 option ( enable-midishare "compile MidiShare support (if it is available)" on )
 option ( enable-opensles "compile OpenSLES support (if it is available)" off )
-option ( enable-oboe "compile Oboe support (requires OpenSLES and/or AAudio)" off )
+option ( enable-oboe "compile Oboe support (requires OpenSLES and/or AAudio)" on )
 option ( enable-network "enable network support (requires BSD sockets)" on )
 option ( enable-oss "compile OSS support (if it is available)" on )
 option ( enable-dsound "compile DirectSound support (if it is available)" on )
@@ -363,14 +370,11 @@ if ( CMAKE_SYSTEM MATCHES "OS2" )
 endif ( CMAKE_SYSTEM MATCHES "OS2" )
 
 # the default C standard to use for all targets
-set(CMAKE_C_STANDARD 90)
-
-# the default C++ standard to use for all targets
-set(CMAKE_CXX_STANDARD 98)
-
-# whether to use gnu extensions
+set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_EXTENSIONS ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Compile with position independent code if the user requested a shared lib, i.e. no PIC if static requested.
 # This is cmakes default behavior, but here it's explicitly required due to the use of libfluidsynth-OBJ as object library,
@@ -939,17 +943,18 @@ if ( enable-sdl3 )
     endif ( SDL3_FOUND )
 endif ( enable-sdl3 )
 
+if (NOT ANDROID)
 unset ( OBOE_SUPPORT CACHE )
 if ( enable-oboe )
-  find_package ( oboe )
-  if ( oboe_FOUND )
+ # find_package ( oboe )
+ # if ( oboe_FOUND )
     set(CMAKE_CXX_STANDARD 14)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set ( OBOE_SUPPORT 1 )
-    list( APPEND PC_REQUIRES_PRIV "oboe-1.0")
-  endif ( oboe_FOUND )
+   # list( APPEND PC_REQUIRES_PRIV "oboe-1.0")
+ # endif ( oboe_FOUND )
 endif ( enable-oboe )
-
+endif ()
 unset ( READLINE_SUPPORT CACHE )
 if ( enable-readline )
   find_package ( Readline )
@@ -987,13 +992,11 @@ if ( enable-midishare )
   set ( MIDISHARE_SUPPORT ${MidiShare_FOUND} )
 endif ( enable-midishare )
 
-if (NOT ANDROID)
 unset ( OPENSLES_SUPPORT CACHE )
 if ( enable-opensles )
   find_package( OpenSLES )
   set ( OPENSLES_SUPPORT ${OpenSLES_FOUND} )
 endif ( enable-opensles )
-endif ()
 
 unset ( ENABLE_MIXER_THREADS CACHE )
 if ( enable-threads )
